@@ -3,7 +3,7 @@ try:
 except ImportError:
     import ure as re
     
-DEBUG = True
+DEBUG = False
     
 EXPRESSION_TAG_OPEN  = "{{ "
 EXPRESSION_TAG_CLOSE = " }}"
@@ -34,6 +34,7 @@ class Template(object):
         self._registered_tags = kwargs
         
     def _replace_tags(self, line, rline):
+        global DEBUG
         if DEBUG:
             print("LINE: %r" % line.strip())
             print("RLINE: %r" % rline.strip())
@@ -71,6 +72,7 @@ class Template(object):
 # TEST CODE
 ################################################################################
 if __name__ == "__main__":
+    DEBUG = True
     tmp = Template.from_file("test.html_template")
     tmp.format(table_content = "dummy", comment1="hello1")
     for line in tmp:
