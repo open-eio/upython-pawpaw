@@ -76,8 +76,9 @@ if __name__ == "__main__":
     DEBUG = True
     tmp = Template.from_file("test.html_template")
     tmp.format(table_content = "dummy", comment1="hello1")
-    for line in tmp:
-        pass
+    with open("test.html",'w') as rnd:
+        for line in tmp:
+            rnd.write(line)
 ################################################################################
 # TEST OUTPUT
 ################################################################################
