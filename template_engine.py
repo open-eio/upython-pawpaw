@@ -106,9 +106,10 @@ if __name__ == "__main__":
     #ptr_tmp    = Template.from_file("templates/pins_table_row.html_template")
     pins_jstmp = Template.from_file("templates/pins.js_template")
     pins_jstmp.format(server_addr = "0.0.0.0")
-    pins_tmp.format(table_content = "dummy", javascript = pins_jstmp)
-    for l in pins_tmp:
-        pass
+    pins_tmp.format(table_content = "dummy", comment='', javascript = pins_jstmp)
+    with open("doc.html",'w') as rnd:
+        for line in pins_tmp:
+            rnd.write(line)
 ################################################################################
 # TEST OUTPUT
 ################################################################################
