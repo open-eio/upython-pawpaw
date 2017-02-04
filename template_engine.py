@@ -16,6 +16,19 @@ EXPRESSION_TAG_CLOSE = " }}"
 RE_TAG = re.compile("{{\s(\w+)\s}}")
     
 class Template(object):
+    """  A templating engine that allows chained lazy evaluation of 
+         nested subtemplates.
+    """
+    # `__iter__` is a generator which evaluates 
+    # `_replace_tags` which is itself a recursive generator thats scans 
+    # each line replacing tags.  If a tag is encountered, then either the 
+    # replacement is a string or it is a subtemplate.  If it is a string we 
+    # just use the str.replace method.  For the subtemplate case we have to 
+    # break the line, yield it, and stitch in all the lines that the 
+    # subtemplate generates.  Finally we have to continue with the rest of 
+    # the line occuring after the tag.  The upshot of all this crazyness is 
+    # a very low RAM footprint since the whole document never needs to be in
+    # memory.
     class SyntaxError(Exception):
         pass
         
