@@ -36,8 +36,7 @@ class Template(object):
     def _replace_tags(self, line, rline):
         global DEBUG
         if DEBUG:
-            print("LINE: %r" % line.strip())
-            print("RLINE: %r" % rline.strip())
+            print("LINE %d: %r" % (self._line_num, line.strip()))
         start_pos = rline.find(EXPRESSION_TAG_OPEN)
         if start_pos == -1: #no tags found
             return line
@@ -62,6 +61,8 @@ class Template(object):
             if DEBUG:
                 print("UNRECOGNIZED TAG '%s'" % (name,))
         #continue with the remaining line
+        if DEBUG:
+            print("RLINE: %r" % rline.strip())
         return self._replace_tags(line, rline)
         
     @classmethod
@@ -77,3 +78,35 @@ if __name__ == "__main__":
     tmp.format(table_content = "dummy", comment1="hello1")
     for line in tmp:
         pass
+################################################################################
+# TEST OUTPUT
+################################################################################
+#    LINE 1: '<!DOCTYPE html>'
+#    LINE 2: '<html>'
+#    LINE 3: '<head> <title>ESP8266 Pins</title>'
+#    LINE 4: '</head>'
+#    LINE 5: '<body> <h1>ESP8266 Pins</h1>'
+#    LINE 6: '<table border="1"> <tr><th>Pin</th><th>Value</th></tr>{{ table_content }}</table>'
+#    FOUND TAG: {{ table_content }}
+#    REPLACING TAG 'table_content' -> 'dummy'
+#    RLINE: '</table>'
+#    LINE 6: '<table border="1"> <tr><th>Pin</th><th>Value</th></tr>dummy</table>'
+#    LINE 7: '<div>{{ comment1 }}</div><div>{{ comment2 }}</div>'
+#    FOUND TAG: {{ comment1 }}
+#    REPLACING TAG 'comment1' -> 'hello1'
+#    RLINE: '</div><div>{{ comment2 }}</div>'
+#    LINE 7: '<div>hello1</div><div>{{ comment2 }}</div>'
+#    FOUND TAG: {{ comment2 }}
+#    UNRECOGNIZED TAG 'comment2'
+#    RLINE: '</div>'
+#    LINE 7: '<div>hello1</div><div>{{ comment2 }}</div>'
+#    LINE 8: '</body>'
+#    LINE 9: '<script>'
+#    LINE 10: '{{ javascript }}'
+#    FOUND TAG: {{ javascript }}
+#    UNRECOGNIZED TAG 'javascript'
+#    RLINE: ''
+#    LINE 10: '{{ javascript }}'
+#    LINE 11: '</script>'
+#    LINE 12: '</html>'
+
