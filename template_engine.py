@@ -32,6 +32,7 @@ class Template(object):
         
     def format(self, **kwargs):
         self._registered_tags = kwargs
+        return self
         
     def _replace_tags(self, line, rline):
         global DEBUG
