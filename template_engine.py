@@ -75,11 +75,19 @@ class Template(object):
 ################################################################################
 if __name__ == "__main__":
     DEBUG = True
+    #test a well-formed but incomplete template
     tmp = Template.from_file("test.html_template")
     tmp.format(table_content = "dummy", comment1="hello1")
     with open("test.html",'w') as rnd:
         for line in tmp:
             rnd.write(line)
+    #test a template with a malformed tag
+    tmp = Template.from_file("test_malformed.html_template")
+    tmp.format(table_content = "dummy", comment1="hello1")
+    with open("test_malformed.html",'w') as rnd:
+        for line in tmp:
+            rnd.write(line)
+    
 ################################################################################
 # TEST OUTPUT
 ################################################################################
