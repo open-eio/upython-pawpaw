@@ -62,7 +62,7 @@ class LazyTemplate(BaseTemplate):
     # `_replace_tags` which is itself a recursive generator thats scans 
     # each line replacing tags.  If a tag is encountered, then either the 
     # replacement is a string or it is a subtemplate.  If it is a string we 
-    # just use the str.replace method.  For the subtemplate case we have to 
+    # just splice it inline.  For the subtemplate case we have to 
     # break the line, yield it, and stitch in all the lines that the 
     # subtemplate generates.  Finally we have to continue with the rest of 
     # the line occuring after the tag.  The upshot of all this crazyness is 
@@ -128,7 +128,7 @@ class LazyTemplate(BaseTemplate):
                     print("END CHAINING SUBTEMPLATE")
             else:
                 #just a simple string replacement
-                line = "".join((line[:tag_start_pos],rep,line[tag_end_pos]))
+                line = "".join((line[:tag_start_pos],rep,line[tag_end_pos:]))
         else:
             if DEBUG:
                 print("UNRECOGNIZED TAG '%s'" % (tag_name,))
