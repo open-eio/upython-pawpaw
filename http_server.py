@@ -12,7 +12,7 @@ DEBUG = True
 SERVER_IP   = '0.0.0.0'
 SERVER_PORT = 9999
 
-class HTTPHandler(StreamRequestHandler):
+class HTTP_RequestHandler(StreamRequestHandler):
     headers_template = [
         "HTTP/1.1 200 OK",
         "Content-Length: {content_length}",  #hold this place with a formatter
