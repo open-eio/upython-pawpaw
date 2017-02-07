@@ -152,7 +152,7 @@ class LazyTemplate(BaseTemplate):
             self._current_indent = m.group(1)
             #replace tags recursively, at start set remaining line to the whole
             for rep_line in self._replace_tags(line,line):
-                #trim dangling whitespace from right and a put back one newline
+                #trim dangling whitespace from right and put back one newline
                 yield rep_line.rstrip() + self._newline
     
     def __str__(self):
@@ -232,7 +232,8 @@ class LazyTemplate(BaseTemplate):
 ################################################################################
 # TEST CODE
 ################################################################################
-if __name__ == "__main__":DEBUG = True
+if __name__ == "__main__":
+    DEBUG = True
     #test a complete template
     pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
     ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
