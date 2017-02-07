@@ -5,7 +5,7 @@ import sys
 from time import monotonic as time
 
 __all__ = ["BaseServer", "TCPServer","BaseRequestHandler", 
-            "StreamRequestHandler"]
+           "StreamRequestHandler"]
 
 class BaseServer:
     timeout = None
@@ -183,7 +183,6 @@ class BaseRequestHandler:
     def finish(self):
         pass
 
-
 class StreamRequestHandler(BaseRequestHandler):
     rbufsize = -1
     wbufsize = -1
@@ -211,27 +210,27 @@ class StreamRequestHandler(BaseRequestHandler):
                 pass
         self.wfile.close()
         self.rfile.close()
-        
+
 ################################################################################
 # TEST CODE
 ################################################################################
-if __name__ == "__main__":
-    #configure an HTTP server
-    SERVER_IP = '0.0.0.0'
-    SERVER_PORT = 80
-    class HTTPHandler(StreamRequestHandler):
-        def handle(self):
-            # self.rfile is a file-like object created by the handler;
-            # we can now use e.g. readline() instead of raw recv() calls
-            self.data = self.rfile.readline().strip()
-            print("{} wrote:".format(self.client_address[0]))
-            print(self.data)
-            # Likewise, self.wfile is a file-like object used to write back
-            # to the client
-            self.wfile.write(self.data.upper())
-    # Create the server, binding to localhost on port 9999
-    server = TCPServer((SERVER_IP, SERVER_PORT), HTTPHandler)
-    
-    # Activate the server; this will keep running until you
-    # interrupt the program with Ctrl-C
-    server.serve_forever()
+#if __name__ == "__main__":
+#    #configure an HTTP server
+#    SERVER_IP = '0.0.0.0'
+#    SERVER_PORT = 80
+#    class HTTPHandler(StreamRequestHandler):
+#        def handle(self):
+#            # self.rfile is a file-like object created by the handler;
+#            # we can now use e.g. readline() instead of raw recv() calls
+#            self.data = self.rfile.readline().strip()
+#            print("{} wrote:".format(self.client_address[0]))
+#            print(self.data)
+#            # Likewise, self.wfile is a file-like object used to write back
+#            # to the client
+#            self.wfile.write(self.data.upper())
+#    # Create the server, binding to localhost on port 9999
+#    server = TCPServer((SERVER_IP, SERVER_PORT), HTTPHandler)
+#    
+#    # Activate the server; this will keep running until you
+#    # interrupt the program with Ctrl-C
+#    server.serve_forever()

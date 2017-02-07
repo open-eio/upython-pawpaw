@@ -232,41 +232,41 @@ class LazyTemplate(BaseTemplate):
 ################################################################################
 # TEST CODE
 ################################################################################
-if __name__ == "__main__":
-    try:
-        from collections import OrderedDict
-    except ImportError: 
-        from ucollections import OrderedDict #micropython specific
-    
-    import mock_machine as machine
-    
-    DEBUG = True
-    #test a complete template
-    pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
-    ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
-    pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
-    
-    PIN_NUMBERS = (0, 2, 4, 5, 12, 13, 14, 15)
-    PINS = OrderedDict((i,machine.Pin(i, machine.Pin.IN)) for i in PIN_NUMBERS)
-    PINS[0].value = True
-    PINS[5].value = True
-    #we make table content a generator that produces one row per iteration
-    def gen_table_content(pins):
-        for pin_num, pin in pins.items():
-            ptr_tmp.format(pin_id = str(pin),
-                           pin_value = 'HIGH' if pin.value() else 'LOW',
-                          )
-            for line in ptr_tmp.render():
-                yield line
-   
-    pins_jstmp.format(server_addr = "0.0.0.0")
-    pins_tmp.format(table_content = gen_table_content(PINS),
-                    comment='This is a test page!',
-                    javascript = pins_jstmp)
-    #print(repr(pins_tmp.render()))
-    with open("doc.html",'w') as rnd:
-        for line in pins_tmp:
-            rnd.write(line)
+#if __name__ == "__main__":
+#    try:
+#        from collections import OrderedDict
+#    except ImportError: 
+#        from ucollections import OrderedDict #micropython specific
+#    
+#    import mock_machine as machine
+#    
+#    DEBUG = True
+#    #test a complete template
+#    pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
+#    ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
+#    pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
+#    
+#    PIN_NUMBERS = (0, 2, 4, 5, 12, 13, 14, 15)
+#    PINS = OrderedDict((i,machine.Pin(i, machine.Pin.IN)) for i in PIN_NUMBERS)
+#    PINS[0].value = True
+#    PINS[5].value = True
+#    #we make table content a generator that produces one row per iteration
+#    def gen_table_content(pins):
+#        for pin_num, pin in pins.items():
+#            ptr_tmp.format(pin_id = str(pin),
+#                           pin_value = 'HIGH' if pin.value() else 'LOW',
+#                          )
+#            for line in ptr_tmp.render():
+#                yield line
+#   
+#    pins_jstmp.format(server_addr = "0.0.0.0")
+#    pins_tmp.format(table_content = gen_table_content(PINS),
+#                    comment='This is a test page!',
+#                    javascript = pins_jstmp)
+#    #print(repr(pins_tmp.render()))
+#    with open("doc.html",'w') as rnd:
+#        for line in pins_tmp:
+#            rnd.write(line)
 ################################################################################
 # TEST OUTPUT
 ################################################################################
