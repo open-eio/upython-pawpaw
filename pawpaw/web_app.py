@@ -4,9 +4,9 @@ try:
 except ImportError: 
     from ucollections import OrderedDict #micrpython specific
 
-from socketserver import TCPServer, StreamRequestHandler
-from http_server import HttpRequestHandler
-from template_engine import Template, LazyTemplate
+from .socketserver    import TCPServer, StreamRequestHandler
+from .http_server     import HttpRequestHandler
+from .template_engine import Template, LazyTemplate
 
 DEBUG = True
 ################################################################################
@@ -34,7 +34,7 @@ class route(object):
 
 ################################################################################
 # Classes
-class PawpawApp(object):
+class WebApp(object):
     class RoutingRequestHandler(HttpRequestHandler):
             pass
 

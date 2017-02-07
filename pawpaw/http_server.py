@@ -5,8 +5,8 @@ try:
 except ImportError: 
     from ucollections import OrderedDict #micrpython specific
 
-from socketserver import TCPServer, StreamRequestHandler
-from template_engine import Template, LazyTemplate
+from .socketserver import TCPServer, StreamRequestHandler
+from .template_engine import Template, LazyTemplate
 
 DEBUG = False
 #DEBUG = True

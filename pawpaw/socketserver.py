@@ -1,6 +1,12 @@
 import socket
-import os
-import sys
+
+try:
+    import sys
+    from sys import print_exception #micropython specific
+except ImportError:
+    import traceback
+    print_exception = lambda exc: traceback.print_exc()
+    
 
 from time import monotonic as time
 
@@ -99,11 +105,7 @@ class BaseServer:
         print('-'*40, file=sys.stderr)
         print('Exception happened during processing of request from',
             client_address, file=sys.stderr)
-        try:
-            sys.print_exception(self._exc)
-        except AttributeError:
-            import traceback
-            traceback.print_exc()
+        print_exception(self._exc,sys.stderr)
         print('-'*40, file=sys.stderr)
 
     def __enter__(self):
