@@ -9,42 +9,15 @@ from socketserver import TCPServer, StreamRequestHandler
 from template_engine import Template, LazyTemplate
 
 DEBUG = True
+################################################################################
+# Classes
 
 class HttpRequest(object):
     __slots__ = 'method','path','args','headers'
     
 class HttpRequestHandler(StreamRequestHandler):
-    headers_template = [
-        "HTTP/1.1 200 OK",
-        "Content-Length: {content_length}",  #hold this place with a formatter
-        "Content-Type: text/html",
-        "Connection: close",
-        ""  #NOTE blank line needed!
-    ]
-
-    headers_template = "\r\n".join(headers_template)
     handler_registry = OrderedDict()
-    
     newline = "\r\n"
-    
-    class route(object):
-        "a decorator to automate handling of HTTP route dispatching"
-        def __init__(self, path, methods = None):
-            #this runs upon decoration
-            self.path = path
-            if methods is None:
-                methods = ["GET"]
-            self.methods = methods
-            
-        def __call__(self, f):
-            #this runs upon decoration immediately after __init__
-            def wrapped_f(*args): #pull in request object
-                return f(*args)
-            #add the wrapped method to the handler_registry with path as key
-            for method in self.methods:
-                key = "%s %s" % (method, self.path)
-            handler_registry[key] = wrapped_f
-            return wrapped_f
             
     def setup(self):
         StreamRequestHandler.setup(self)
@@ -168,16 +141,33 @@ class HttpRequestHandler(StreamRequestHandler):
             print("DISPATCHING REQUEST key='%s' to handler=%r" % (key,handler))
         #call the handler
         handler(self)
-        # Likewise, self.wfile is a file-like object used to write back
-        # to the client
-        #buff = []
-        #buff.append("%s %s %r" % (method,req_path,params))
-        #self.wfile.write(bytes("".join(buff),'utf8'))
+        
     def handle_default(self):
         if DEBUG:
             print("INSIDE HANDLER name='%s' " % ('handle_default'))
         tmp = LazyTemplate.from_file("templates/404.html_template")
-        self.render_template(tmp)#, status = "HTTP/1.1 404 Not Found")
+        self.render_template(tmp)
+        
+################################################################################
+# DECORATORS
+class route(object):
+    "a decorator to automate handling of HTTP route dispatching"
+    def __init__(self, path, methods = None):
+        #this runs upon decoration
+        self.path = path
+        if methods is None:
+            methods = ["GET"]
+        self.methods = methods
+        
+    def __call__(self, f):
+        #this runs upon decoration immediately after __init__
+        def wrapped_f(*args): #pull in request object
+            return f(*args)
+        #add the wrapped method to the handler_registry with path as key
+        for method in self.methods:
+            key = "%s %s" % (method, self.path)
+        HttpRequestHandler.handler_registry[key] = wrapped_f
+        return wrapped_f
 
 ################################################################################
 # TEST  CODE
@@ -186,9 +176,42 @@ if __name__ == "__main__":
     SERVER_IP   = '0.0.0.0'
     SERVER_PORT = 9999
     
+    #---------------------------------------------------------------------------
     class TestPawpawApp(HttpRequestHandler):
-        pass
-
+        @route("/")
+        def index(self):
+            if DEBUG:
+                print("INSIDE HANDLER name='%s' " % ('index'))
+            try:
+                from collections import OrderedDict
+            except ImportError: 
+                from ucollections import OrderedDict #micropython specific
+            import mock_machine as machine
+    
+            #test a complete template
+            pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
+            ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
+            pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
+            
+            PIN_NUMBERS = (0, 2, 4, 5, 12, 13, 14, 15)
+            PINS = OrderedDict((i,machine.Pin(i, machine.Pin.IN)) for i in PIN_NUMBERS)
+            PINS[0].value = True
+            PINS[5].value = True
+            #we make table content a generator that produces one row per iteration
+            def gen_table_content(pins):
+                for pin_num, pin in pins.items():
+                    ptr_tmp.format(pin_id = str(pin),
+                                   pin_value = 'HIGH' if pin.value() else 'LOW',
+                                  )
+                    for line in ptr_tmp.render():
+                        yield line
+            pins_jstmp.format(server_addr = "0.0.0.0")
+            pins_tmp.format(table_content = gen_table_content(PINS),
+                            comment='This is a test page!',
+                            javascript = pins_jstmp)
+            #finally render the view
+            self.render_template(pins_tmp)
+    #---------------------------------------------------------------------------
     # Create the server, binding to localhost on port 9999
     server = TCPServer((SERVER_IP, SERVER_PORT), TestPawpawApp)
 

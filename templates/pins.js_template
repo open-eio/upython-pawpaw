@@ -9,7 +9,7 @@ document.body.addEventListener("click", function(event) {
 function postToggle (btn_id) {
   var form = document.createElement('form');
   form.setAttribute('method', 'post');
-  form.setAttribute('action', 'http://{{ server_addr }}?btn_id='+btn_id);
+  form.setAttribute('action', 'http://{{ server_base_url }}?btn_id='+btn_id);
   form.style.display = 'hidden';
   document.body.appendChild(form)
   form.submit();

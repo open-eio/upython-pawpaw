@@ -233,11 +233,6 @@ class LazyTemplate(BaseTemplate):
 # TEST CODE
 ################################################################################
 if __name__ == "__main__":
-    DEBUG = True
-    #test a complete template
-    pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
-    ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
-    pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
     try:
         from collections import OrderedDict
     except ImportError: 
