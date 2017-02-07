@@ -144,7 +144,7 @@ class HttpRequestHandler(StreamRequestHandler):
     def handle_default(self):
         if DEBUG:
             print("INSIDE HANDLER name='%s' " % ('handle_default'))
-        tmp = LazyTemplate.from_file("templates/404.html_template")
+        tmp = LazyTemplate.from_file("templates/404.html")
         self.render_template(tmp)
 
 ################################################################################
