@@ -138,8 +138,9 @@ class HttpRequestHandler(StreamRequestHandler):
             handler = self.__class__.handle_default
         if DEBUG:
             print("DISPATCHING REQUEST key='%s' to handler=%r" % (key,handler))
-        #call the handler
-        handler(self)
+        #call the handler, passing self as context
+        context = self
+        handler(context)
         
     def handle_default(self):
         if DEBUG:
