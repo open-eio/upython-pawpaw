@@ -29,7 +29,7 @@ class route(object):
         for req_method in self.req_methods:
             key = "%s %s" % (req_method, self.path)
             if DEBUG:
-                print("@route REGISTERING HANDLER '%s'" % (key,))
+                print("@route REGISTERING HANDLER '%s' on method '%s'" % (key,m))
             self.registered_routes[key] = m
         return m
 
@@ -66,6 +66,16 @@ def Router(cls):
 #-------------------------------------------------------------------------------
 class WebApp(object):
     def __init__(self, server_addr, server_port, MyHttpRequestHandler = None):
+        if DEBUG:
+            print("INSIDE WebApp.__init__:")
+            print("\tserver_addr: %s" % server_addr)
+            print("\tserver_port: %s" % server_port)
+            try:
+                from micropython import mem_info
+                mem_info()
+            except ImportError:
+                pass
+            
         if MyHttpRequestHandler is None:
             MyHttpRequestHandler = HttpRequestHandler #default handler
         # Create the server, binding to localhost on port 9999
@@ -75,6 +85,13 @@ class WebApp(object):
         self._server = TCPServer((self.server_addr, self.server_port), MyHttpRequestHandler)
         
     def serve_forever(self):
+        if DEBUG:
+            print("INSIDE WebApp.serve_forever")
+            try:
+                from micropython import mem_info
+                mem_info()
+            except ImportError:
+                pass
         # Activate the server; this will keep running until you
         # interrupt the program with Ctrl-C
         self._server.serve_forever()
