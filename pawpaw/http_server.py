@@ -81,8 +81,12 @@ class HttpServer(object):
             except ImportError:
                 pass
         phase = "listening for connection"
+        if DEBUG:
+            print("\t%s" % phase)
         client_sock, client_address = self.socket.accept()
         phase = "accepted connection from '%s'" % (client_address,)
+        if DEBUG:
+            print("\t%s" % phase)
         conn_rfile = client_sock.makefile('rb', self.rbufsize)
         conn_wfile = client_sock.makefile('wb', self.wbufsize)
         try:
@@ -91,13 +95,19 @@ class HttpServer(object):
             #on micropython makefile does nothing returns a usocket.socket obj
             conn_reader = HttpConnectionReader(conn_rfile, client_address)
             phase = 'reading request'
+            if DEBUG:
+                print("\t%s" % phase)
             request = conn_reader.parse_request()
             #-------------------------------------------------------------------
             # handler lookup phase
             phase = 'handler lookup'
+            if DEBUG:
+                print("\t%s" % phase)
             handler = None
             if not request is None:
                 key = "%s %s" % (request.method, request.path)
+                if DEBUG:
+                    print("\t\tkey: %r" % key)
                 handler = self.app.handler_registry.get(key)
             if handler is None:
                 handler = self.app.handler_registry['DEFAULT']
@@ -105,6 +115,9 @@ class HttpServer(object):
             # response phase
             conn_responder = HttpConnectionResponder(conn_wfile,request)
             phase = 'handling response'
+            if DEBUG:
+                print("\t%s" % phase)
+                print("\t\thandler: %s" % handler)
             handler(conn_responder)
         except Exception as exc:
             print('-'*40, file=sys.stderr)
