@@ -47,11 +47,15 @@ def Router(cls):
             handler_registry = kwargs.get("handler_registry")
             if handler_registry is None:
                 handler_registry = OrderedDict()
+            def bind_method(m):
+                return (lambda *args, **kwargs: m(self,*args,**kwargs))
             #bind self to all of the route handlers
-            for key, handler in type(self)._unbound_handler_registry.items():
-                handler_registry[key] = lambda context: handler(self,context)
+            for key, unbound_handler in type(self)._unbound_handler_registry.items():
+                handler_registry[key] = handler = bind_method(unbound_handler)
+                if DEBUG:
+                    print("@Router BOUND HANDLER key='%s': %s" % (key,handler))
             #bind the default handler
-            handler_registry['DEFAULT'] = lambda context: self.handle_default(context)
+            handler_registry['DEFAULT'] = bind_method(type(self).handle_default)
             kwargs['handler_registry'] = handler_registry
             cls.__init__(self,*args, **kwargs)
     
@@ -97,7 +101,7 @@ class WebApp(object):
     def handle_default(self, context):
         if DEBUG:
             print("INSIDE HANDLER name='%s' " % ('HttpConnectionResponder.handle_default'))
-        tmp = LazyTemplate.from_file("templates/404.html")
+        tmp = LazyTemplate.from_file("html/404.html")
         context.render_template(tmp)
 
 ################################################################################
