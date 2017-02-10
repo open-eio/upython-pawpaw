@@ -197,13 +197,13 @@ class LazyTemplate(BaseTemplate):
                 # the follow is a hueristic iterablility test that works for generators
                 # and other iterable containers on upython
                 rep_isiterable = False
-                try:
-                    rep.__next__
-                    rep is rep.__iter__()
-                    #tests pass here
-                    rep_isiterable = True
-                except AttributeError:
-                    pass
+                if rep is iter(rep):
+                    if hasattr(rep,'__next__'): #standard iterable
+                        #tests pass here
+                        rep_isiterable = True
+                    elif hasattr(rep,'close') and hasattr(rep,'send'): #generator
+                        #tests pass here
+                        rep_isiterable = True
                 if rep_isiterable:
                     if DEBUG:
                         print("SPLICING IN ITERABLE")
