@@ -138,6 +138,7 @@ class LazyTemplate(BaseTemplate):
         return self
                 
     def __next__(self):
+        
         return next(self._gen_next)
         
     def _next_generator(self):
@@ -172,6 +173,12 @@ class LazyTemplate(BaseTemplate):
         #rline = line
         at_pos = 0
         while True:
+            if DEBUG:
+                try:
+                    import micropython
+                    print("_replace_tags: STACK USE = %d" % micropython.stack_use())
+                except ImportError:
+                    pass
             #look for tags after at_pos
             tag_start_pos, tag_end_pos, tag_name = scan_tag(line, at_pos)
             if tag_start_pos == -1: #no tags found
