@@ -150,8 +150,8 @@ class LazyTemplate(BaseTemplate):
             #determine the indentation
             m = RE_INDENT.match(line)
             self._current_indent = m.group(1)
-            #replace tags recursively, at start set remaining line to the whole
-            for rep_line in self._replace_tags(line,line):
+            #replace tags iteratively
+            for rep_line in self._replace_tags(line):
                 #trim dangling whitespace from right and put back one newline
                 yield rep_line.rstrip() + self._newline
     
@@ -163,60 +163,66 @@ class LazyTemplate(BaseTemplate):
         self.close()
         return "".join(lines)
         
-    def _replace_tags(self, line, rline):
+    def _replace_tags(self, line):
         #NOTE this a a generator which yields when a 
         global DEBUG
         if DEBUG:
             print("LINE %d, indent %r: %r" % (self._line_num, self._current_indent, line))
-        tag_start_pos, tag_end_pos, tag_name = scan_tag(rline)
-        if tag_start_pos == -1: #no tags found
-            if line:  #prevent empty lines from being sent
-                yield line
-            raise StopIteration
-        #set up the remainder of the line
-        rline = rline[tag_end_pos:]
-        rep = self._tag_replacements.get(tag_name)
-        if not rep is None:
-            if DEBUG:
-                print("REPLACING TAG '%s' -> '%s'" % (tag_name,rep))
-            # test if we can iterate over rep to produce output text
-            # the follow is a hueristic iterablility test that works for generators
-            # and other iterable containers on upython
-            rep_isiterable = False
-            try:
-                rep.__next__
-                rep is rep.__iter__()
-                #tests pass here
-                rep_isiterable = True
-            except AttributeError:
-                pass
-            if rep_isiterable:
+        
+        #rline = line
+        at_pos = 0
+        while True:
+            #look for tags after at_pos
+            tag_start_pos, tag_end_pos, tag_name = scan_tag(line, at_pos)
+            if tag_start_pos == -1: #no tags found
+                if line:  #prevent empty lines from being sent
+                    yield line
+                raise StopIteration
+            
+            rep = self._tag_replacements.get(tag_name)
+            if not rep is None:
                 if DEBUG:
-                    print("SPLICING IN ITERABLE")
-                #we must chain in the sub-template
-                part_line = line[:tag_start_pos] #text in current line
-                #extract all the lines of the sub-template
-                first_line = part_line + next(rep) #first line should already have indentation
-                yield first_line
-                for sub_line in rep:
-                    #extend the current indentation to sub lines and strip newlines
-                    yield self._current_indent + sub_line
-                #reduce the line to the remaining portion
-                line = rline.strip() #trim any dangling whitespace
-                if DEBUG:
-                    print("END SPLICING ITERABLE")
+                    print("REPLACING TAG '%s' -> '%s'" % (tag_name,rep))
+                #break the line in pre-tag and post-tag parts
+                pre_tag_line  = line[:tag_start_pos]
+                post_tag_line = line[tag_end_pos:]
+                # test if we can iterate over rep to produce output text
+                # the follow is a hueristic iterablility test that works for generators
+                # and other iterable containers on upython
+                rep_isiterable = False
+                try:
+                    rep.__next__
+                    rep is rep.__iter__()
+                    #tests pass here
+                    rep_isiterable = True
+                except AttributeError:
+                    pass
+                if rep_isiterable:
+                    if DEBUG:
+                        print("SPLICING IN ITERABLE")
+                    #we must chain in the sub-template
+                    first_line = pre_tag_line + next(rep) #first line should already have indentation
+                    yield first_line
+                    #extract all the lines of the sub-template
+                    for sub_line in rep:
+                        #extend the current indentation to sub lines and strip newlines
+                        yield self._current_indent + sub_line
+                    #reduce the line to the remaining portion
+                    line = post_tag_line.strip() #trim any dangling whitespace
+                    at_pos = 0 #start scan a beginning of the reduced line
+                    if DEBUG:
+                        print("END SPLICING ITERABLE")
+                else:
+                    rep = str(rep)
+                    #just a simple string replacement
+                    line = "".join((pre_tag_line,rep,post_tag_line))
+                    at_pos = tag_end_pos #start next scan after this tag
             else:
-                rep = str(rep)
-                #just a simple string replacement
-                line = "".join((line[:tag_start_pos],rep,line[tag_end_pos:]))
-        else:
-            if DEBUG:
-                print("UNRECOGNIZED TAG '%s'" % (tag_name,))
-        #continue with the remaining line
-        if DEBUG:
-            print("RLINE: %r" % rline)
-        for rep_line in self._replace_tags(line, rline):
-            yield rep_line
+                #just continue as if nothing is wrong ;)
+                if DEBUG:
+                    print("UNRECOGNIZED TAG '%s'" % (tag_name,))
+                at_pos = tag_end_pos #start next scan after this tag
+            #continue loop with the remaining line
     
     def close(self):
         self._textio.close()
@@ -238,23 +244,22 @@ class LazyTemplate(BaseTemplate):
 #    except ImportError: 
 #        from ucollections import OrderedDict #micropython specific
 #    
-#    import mock_machine as machine
 #    
 #    DEBUG = True
 #    #test a complete template
-#    pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
-#    ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
-#    pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
+#    pins_tmp   = LazyTemplate.from_file("test_data/pins.html")
+#    ptr_tmp    =     Template.from_file("test_data/pins_table_row.html")
+#    pins_jstmp = LazyTemplate.from_file("test_data/pins.js")
 #    
 #    PIN_NUMBERS = (0, 2, 4, 5, 12, 13, 14, 15)
-#    PINS = OrderedDict((i,machine.Pin(i, machine.Pin.IN)) for i in PIN_NUMBERS)
-#    PINS[0].value = True
-#    PINS[5].value = True
+#    PINS = OrderedDict((i,False) for i in PIN_NUMBERS)
+#    PINS[0] = True
+#    PINS[5] = True
 #    #we make table content a generator that produces one row per iteration
 #    def gen_table_content(pins):
-#        for pin_num, pin in pins.items():
-#            ptr_tmp.format(pin_id = str(pin),
-#                           pin_value = 'HIGH' if pin.value() else 'LOW',
+#        for pin_num, val in pins.items():
+#            ptr_tmp.format(pin_id = str(pin_num),
+#                           pin_value = 'HIGH' if val else 'LOW',
 #                          )
 #            for line in ptr_tmp.render():
 #                yield line
