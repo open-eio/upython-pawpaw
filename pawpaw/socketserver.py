@@ -199,7 +199,16 @@ class StreamRequestHandler(object):
             # A final socket error may have occurred here, such as
             # the local error ECONNABORTED.
             pass
-   
+            
+    def _flush(self):
+        # in micropython makefile is a no-op, so wfile is still a 
+        # usocket.socket object and thus has no flush method
+        try:
+            self.wfile.flush()
+        except AttributeError:
+            #on the first error this method gets replaced with a no-op
+            self._flush = lambda: None
+
 
 ################################################################################
 # TEST CODE
