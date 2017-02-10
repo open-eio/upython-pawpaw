@@ -17,7 +17,7 @@ class HttpRequest(object):
     
 class HttpRequestHandler(StreamRequestHandler):
     handler_registry = OrderedDict()
-    newline = "\r\n"
+    _newline_bytes = bytes("\r\n", 'utf8')
             
     def setup(self):
         StreamRequestHandler.setup(self)
@@ -27,7 +27,7 @@ class HttpRequestHandler(StreamRequestHandler):
                         headers = None):
         global DEBUG
         if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('render_template'))
+            print("INSIDE METHOD name='%s' " % ('HttpRequestHandler.render_template'))
             try:
                 from micropython import mem_info
                 mem_info()
@@ -51,65 +51,63 @@ class HttpRequestHandler(StreamRequestHandler):
             #use chunked transfer coding for an iterable template
             headers['Transfer-Encoding'] = 'chunked'
             #send headers
-            self._send_response_headers(status, headers)
+            self.send_response_headers(status, headers)
             #send in chunks
-            for chunk in tmp:
-                self._send_chunk(chunk)
-            #IMPORTANT terminate chunked transfer
-            self._send_line("0")
-            self._send_line("")
+            self.send_by_chunks(tmp)
         else:
             content = tmp.render().read() #read the StringIO or stream interface
             #compute and send using Content-Length
             headers['Content-Length'] = len(content)
             #send headers
-            self._send_response_headers(status, headers)
+            self.send_response_headers(status, headers)
             #send all at once
-            self._send(content)
+            self.send(content)
         if DEBUG:
-            print("LEAVING METHOD name='%s' " % ('render_template'))
+            print("LEAVING METHOD name='%s' " % ('HttpRequestHandler.render_template'))
             try:
                 from micropython import mem_info
                 mem_info()
             except ImportError:
                 pass
-            
-    def _send_response_headers(self, status, headers):
+                
+    def send_response_headers(self, status, headers):
         global DEBUG
         if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('_send_response_headers'))
-        self._send_line(status)
+            print("INSIDE METHOD name='%s' " % ('HttpRequestHandler.send_response_headers'))
+        w  = self.wfile.write
+        nl = self._newline_bytes
+        w(bytes(status.rstrip(),'utf8'))
+        w(nl)
         for key, val in headers.items():
-            line = "%s: %s" % (key,val)
-            self._send_line(line)
+            line = "%s: %s" % (key.strip(),val.strip())
+            w(bytes(line,'utf8'))
+            w(nl)
         #IMPORTANT final blank line
-        self._send_line("")
-        
-    def _send(self, content):
+        w(nl)
+                
+    def send(self, content):
         global DEBUG
         if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('_send'))
+            print("INSIDE METHOD name='%s' " % ('HttpRequestHandler.send'))
         self.wfile.write(bytes(content,'utf8'))
-        self.wfile.flush()
+        self._flush()
         
-    def _send_line(self, line):
+    def send_by_chunks(self, chunk_iter):
         global DEBUG
         if DEBUG:
-            print("INSIDE METHOD name='%s'" % ('_send_line'))
-        line = line.rstrip()
-        line += self.newline
-        if DEBUG:
-            print("LINE: %r" % line)
-        self.wfile.write(bytes("%s" % (line,),'utf8'))
-        self.wfile.flush()
-        
-    def _send_chunk(self, chunk):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s'" % ('_send_chunk'))
-        self.wfile.write(bytes("%X%s" % (len(chunk),self.newline),'utf8'))
-        self.wfile.write(bytes("%s%s" % (chunk,self.newline),'utf8'))
-        self.wfile.flush()
+            print("INSIDE METHOD name='%s'" % ('HttpRequestHandler.send_by_chunks'))
+        w  = self.wfile.write
+        nl = self._newline_bytes
+        for chunk in chunk_iter:
+            w(bytes("%X" % len(chunk),'utf8')) #chunk size specified in hexadecimal
+            w(nl)
+            w(bytes(chunk,'utf8'))
+            w(nl)
+        #IMPORTANT chunk trailer
+        w(b"0")
+        w(nl)
+        w(nl)
+        self._flush()
     
     def handle(self):
         global DEBUG
@@ -172,7 +170,7 @@ class HttpRequestHandler(StreamRequestHandler):
         
     def handle_default(self):
         if DEBUG:
-            print("INSIDE HANDLER name='%s' " % ('handle_default'))
+            print("INSIDE HANDLER name='%s' " % ('HttpRequestHandler.handle_default'))
         tmp = LazyTemplate.from_file("templates/404.html")
         self.render_template(tmp)
         
