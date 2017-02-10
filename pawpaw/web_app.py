@@ -4,8 +4,8 @@ try:
 except ImportError: 
     from ucollections import OrderedDict #micrpython specific
 
-from .socketserver    import TCPServer
-from .http_server     import HttpRequestHandler
+from .http_server     import HttpServer
+from .template_engine import Template, LazyTemplate
 
 DEBUG = True
 ################################################################################
@@ -39,21 +39,20 @@ class route(object):
 def Router(cls):
     if DEBUG:
         print("@Router: wrapping class '%s'" % cls)
-        
-    #this is a private class allowing independence of wrapped WebApp classes
-    class RoutingRequestHandler(HttpRequestHandler):
-            pass
-            
+    
     class RouterWrapped(cls):
         #update the private class to contain all currently registered routes
-        _handler_registry = route.registered_routes.copy()
+        _unbound_handler_registry = route.registered_routes.copy()
         def __init__(self,*args,**kwargs):
-            if not kwargs.get("MyHttpRequestHandler") is None:
-                print("Warning: @Router will overwrite 'MyHttpRequestHandler'")
+            handler_registry = kwargs.get("handler_registry")
+            if handler_registry is None:
+                handler_registry = OrderedDict()
             #bind self to all of the route handlers
-            for key, handler in type(self)._handler_registry.items():
-                RoutingRequestHandler.handler_registry[key] = lambda context: handler(self,context)
-            kwargs['MyHttpRequestHandler'] = RoutingRequestHandler
+            for key, handler in type(self)._unbound_handler_registry.items():
+                handler_registry[key] = lambda context: handler(self,context)
+            #bind the default handler
+            handler_registry['DEFAULT'] = lambda context: self.handle_default(context)
+            kwargs['handler_registry'] = handler_registry
             cls.__init__(self,*args, **kwargs)
     
     #remove the registered_routes from the route decorator class 
@@ -65,7 +64,7 @@ def Router(cls):
 # Classes
 #-------------------------------------------------------------------------------
 class WebApp(object):
-    def __init__(self, server_addr, server_port, MyHttpRequestHandler = None):
+    def __init__(self, server_addr, server_port, handler_registry):
         if DEBUG:
             print("INSIDE WebApp.__init__:")
             print("\tserver_addr: %s" % server_addr)
@@ -75,14 +74,13 @@ class WebApp(object):
                 mem_info()
             except ImportError:
                 pass
-            
-        if MyHttpRequestHandler is None:
-            MyHttpRequestHandler = HttpRequestHandler #default handler
+                
         # Create the server, binding to localhost on port 9999
         self.server_addr = server_addr
         self.server_port = server_port
-        self._MyHttpRequestHandler = MyHttpRequestHandler
-        self._server = TCPServer((self.server_addr, self.server_port), MyHttpRequestHandler)
+        self.handler_registry = handler_registry
+        addr = (self.server_addr, self.server_port)
+        self._server = HttpServer(addr,app=self)
         
     def serve_forever(self):
         if DEBUG:
@@ -95,6 +93,12 @@ class WebApp(object):
         # Activate the server; this will keep running until you
         # interrupt the program with Ctrl-C
         self._server.serve_forever()
+    
+    def handle_default(self, context):
+        if DEBUG:
+            print("INSIDE HANDLER name='%s' " % ('HttpConnectionResponder.handle_default'))
+        tmp = LazyTemplate.from_file("templates/404.html")
+        context.render_template(tmp)
 
 ################################################################################
 # TEST  CODE
