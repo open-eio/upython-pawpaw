@@ -10,7 +10,14 @@ except ImportError:
 try:
     from collections import OrderedDict
 except ImportError: 
-    from ucollections import OrderedDict #micrpython specific
+    from ucollections import OrderedDict #micropython specific
+    
+try:
+    import json
+except ImportError:
+    import ujson as json #micropython specific
+    
+from .template_engine import Template, LazyTemplate
 
 DEBUG = False
 DEBUG = True
@@ -175,7 +182,7 @@ class HttpConnectionReader(object):
             line = str(self.conn_rfile.readline(),'utf8').strip()
             if DEBUG:
                 print("CLIENT: %r" % line)
-            if not line or line == b'\r\n':
+            if not line or line == '\r\n':
                 break
             key, val = line.split(':',1)
             headers[key] = val
@@ -201,6 +208,12 @@ class HttpConnectionResponder(object):
         self.conn_wfile = conn_wfile
         self.request    = request
         
+    def send_json_response(self, resp):
+        tmp = Template(text=json.dumps(resp))
+        headers = OrderedDict()
+        headers['Content-Type'] = 'application/json'
+        self.render_template(tmp, headers = headers)
+        
     def render_template(self, tmp,
                         status  = "HTTP/1.1 200 OK",
                         headers = None):
@@ -219,13 +232,11 @@ class HttpConnectionResponder(object):
         # the follow is a hueristic iterablility test that works for generators
         # and other iterable containers on upython
         tmp_isiterable = False
-        try:
-            tmp.__next__
-            tmp is tmp.__iter__()
-            #tests pass here
-            tmp_isiterable = True
-        except AttributeError:
-            pass
+        if tmp is iter(tmp):
+            if hasattr(tmp,'__next__') or hasattr(tmp,'next'):
+                #tests pass here
+                tmp_isiterable = True
+            
         if tmp_isiterable:
             #use chunked transfer coding for an iterable template
             headers['Transfer-Encoding'] = 'chunked'
@@ -236,7 +247,7 @@ class HttpConnectionResponder(object):
         else:
             content = tmp.render().read() #read the StringIO or stream interface
             #compute and send using Content-Length
-            headers['Content-Length'] = len(content)
+            headers['Content-Length'] = "%d" % len(content)
             #send headers
             self.send_response_headers(status, headers)
             #send all at once
