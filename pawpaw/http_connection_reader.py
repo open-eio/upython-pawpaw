@@ -18,6 +18,13 @@ DEBUG = True
 # Classes
 class HttpRequest(object):
     __slots__ = 'method','path','args','headers','client_address'
+    def str_lines(self):
+        buff = []
+        for attr in self.__slots__:
+            buff.append("%s: %s" % (attr, getattr(self,attr)))
+        return buff
+    def __str__(self):
+        return "\n".join(self.str_lines())
 
 class HttpConnectionReader(object):
     def __init__(self, conn_rfile, client_address):

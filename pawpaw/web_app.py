@@ -1,13 +1,28 @@
 import time
+
+try:
+    import sys
+    from sys import print_exception #micropython specific
+except ImportError:
+    import traceback
+    print_exception = lambda exc, file_: traceback.print_exc(file=file_)
+
 try:
     from collections import OrderedDict
 except ImportError: 
-    from ucollections import OrderedDict #micrpython specific
+    from ucollections import OrderedDict #micropython specific
+
+try:
+    from io import StringIO
+except ImportError:
+    from uio import StringIO
 
 from .http_server     import HttpServer
 from .template_engine import Template, LazyTemplate
 
 DEBUG = True
+DEFAULT_LOG_FILENAME = "logs/WebApp.yaml"
+LOG_FILESIZE_LIMIT   = 2**20 #1MB
 ################################################################################
 # DECORATORS
 #-------------------------------------------------------------------------------
@@ -37,8 +52,10 @@ class route(object):
 # @Router
 #a class decorator which creates a class-private Routing HttpRequestHandler
 def Router(cls):
+    log_filename = "logs/{}.yaml".format(cls.__name__)
     if DEBUG:
-        print("@Router: wrapping class '%s'" % cls)
+        print("@Router: wrapping class '%s'" % cls.__name__)
+        print("\tLOG FILENAME: %s" % log_filename)
     
     class RouterWrapped(cls):
         #update the private class to contain all currently registered routes
@@ -57,6 +74,8 @@ def Router(cls):
             #bind the default handler
             handler_registry['DEFAULT'] = bind_method(type(self).handle_default)
             kwargs['handler_registry'] = handler_registry
+            #setup the log file
+            kwargs['log_filename'] = log_filename
             cls.__init__(self,*args, **kwargs)
     
     #remove the registered_routes from the route decorator class 
@@ -67,8 +86,59 @@ def Router(cls):
 ################################################################################
 # Classes
 #-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Logger - a context manager class for making log entries in YAML format.
+#          File size is limited to LOG_FILESIZE_LIMIT over which entries will
+#          wrap around to beginning of file.
+class Logger(object):
+    def __init__(self, filename, app):
+        self.filename = filename
+        self.app = app
+        self.buffer = []
+    def __enter__(self):
+        self.log_file = open(self.filename,'a')
+        self.buffer.append("---\n") #YAML start doc
+        try: #get a timestamp
+            ts = self.app.get_timestamp()
+            self.buffer.append("Time: %s\n" % ts)
+        except AttributeError:
+            pass
+        return self
+    def __exit__(self, *args):
+        self.buffer.append("...\n") #YAML end doc
+        entry = "".join(self.buffer)
+        fsz = self.log_file.tell()
+        if fsz + len(entry) > LOG_FILESIZE_LIMIT:
+            #log file exceeds limit so wrap back to beginning
+            self.log_file.seek(0,0)
+        self.log_file.write(entry)
+        self.log_file.close()
+    def write(self, text):
+        self.buffer.append(text)
+    def write_exception(self, exc):
+        #NOTE print_exception has an awkward interface, accepting only a file as
+        # its second arg, we fake it out
+        sfile = StringIO()
+        print_exception(exc, sfile)
+        sfile.seek(0,0)
+        self.write("Exception: |\n") #this starts a multiline literal block
+        for line in sfile:
+            self.write("    ") #indent each line of block
+            self.write(line)
+        #end when dedented
+        sfile.close()
+
+#-------------------------------------------------------------------------------
+# WebApp - a basic application which responds to HTTP requests over a socket
+#          interface.
 class WebApp(object):
-    def __init__(self, server_addr, server_port, handler_registry):
+    def __init__(self,
+                 server_addr,
+                 server_port,
+                 handler_registry,
+                 log_filename = DEFAULT_LOG_FILENAME
+                ):
         if DEBUG:
             print("INSIDE WebApp.__init__:")
             print("\tserver_addr: %s" % server_addr)
@@ -83,6 +153,7 @@ class WebApp(object):
         self.server_addr = server_addr
         self.server_port = server_port
         self.handler_registry = handler_registry
+        self.log_filename = log_filename
         addr = (self.server_addr, self.server_port)
         self._server = HttpServer(addr,app=self)
         
@@ -101,71 +172,30 @@ class WebApp(object):
     def handle_default(self, context):
         if DEBUG:
             print("INSIDE HANDLER name='%s' " % ('HttpConnectionResponder.handle_default'))
-        tmp = LazyTemplate.from_file("html/404.html")
-        context.render_template(tmp)
+        context.send_file("html/404.html")
+        
+    def get_logger(self):
+        return Logger(self.log_filename, app = self)
+        
+    def get_timestamp(self):
+        try:
+            import machine
+            rtc = machine.RTC()
+            dt = rtc.datetime()
+            year, month, day, weekday, hour, minute, second, millisecond = dt
+            timestamp = "{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}".format(
+              year=year, month=month, day=day, hour=hour, minute=minute, second=second)
+            return timestamp
+        except ImportError:
+            import datetime
+            dt = datetime.datetime.now()
+            timestamp = "{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}".format(
+              year=dt.year, month=dt.month, day=dt.day, hour=dt.hour, minute=dt.minute, second=dt.second)
+            return timestamp
+
 
 ################################################################################
 # TEST  CODE
 ################################################################################
 #if __name__ == "__main__":
-#    try:
-#        from collections import OrderedDict
-#    except ImportError: 
-#        from ucollections import OrderedDict #micropython specific
-#    
-#    import mock_machine as machine
-#    
-#    SERVER_IP   = '0.0.0.0'
-#    SERVER_PORT = 9999
-#    PIN_NUMBERS = (0, 2, 4, 5, 12, 13, 14, 15)
-#    PINS = OrderedDict((i,machine.Pin(i, machine.Pin.IN)) for i in PIN_NUMBERS)
-#    
-#    #---------------------------------------------------------------------------
-#    @Router
-#    class PinServer(PawpawApp):
-#        @route("/", methods=['GET','POST'])
-#        def pins(self, context):
-#            if DEBUG:
-#                print("INSIDE ROUTE HANDLER name='%s' " % ('pins'))
-#            
-#    
-#            #open the template files
-#            pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
-#            ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
-#            pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
-#            comment = ""
-#           
-#            if context.request.method == 'POST':
-#                if DEBUG:
-#                    print("HANDLING POST REQUEST: args = %r" % context.request.args)
-#                #get the button id from the params and pull out the corresponding pin object
-#                btn_id = context.request.args['btn_id']
-#                pin_id = int(btn_id[3:])#pattern is "btn\d\d"
-#                pin = PINS[pin_id]
-#                pin.value = not pin.value() #invert the pin state
-#                comment = "Toggled pin %d" % pin_id
-#                
-#            #we make table content a generator that produces one row per iteration
-#            def gen_table_content(pins):
-#                for pin_num, pin in pins.items():
-#                    ptr_tmp.format(pin_id = str(pin),
-#                                   pin_value = 'HIGH' if pin.value() else 'LOW',
-#                                  )
-#                    for line in ptr_tmp.render():
-#                        yield line
-#            server_base_url = "%s:%s" % (self.server_addr,self.server_port)
-#            pins_jstmp.format(server_base_url = server_base_url)
-#            pins_tmp.format(table_content = gen_table_content(PINS),
-#                            comment=comment,
-#                            javascript = pins_jstmp)
-#            #finally render the view
-#            context.render_template(pins_tmp)
-#    #---------------------------------------------------------------------------
-#    # Create application instance binding to localhost on port 9999
-#    app = PinServer(server_addr = '0.0.0.0',
-#                    server_port = 9999,
-#                   )
 
-#    # Activate the server; this will keep running until you
-#    # interrupt the program with Ctrl-C
-#    app.serve_forever()

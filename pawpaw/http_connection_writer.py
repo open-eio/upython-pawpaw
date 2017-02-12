@@ -21,6 +21,16 @@ from .template_engine import Template, LazyTemplate
 
 DEBUG = False
 DEBUG = True
+
+MIME_TYPES = {
+    "html" : "text/html",
+    "jpeg" : "image/jpeg",
+    "jpg"  : "image/jpeg",
+    "json" : "application/json",
+    "txt"  : "text/plain",
+    "yaml" : "text/yaml",
+}
+DEFAULT_MIME_TYPE = 'application/octet-stream'
 ################################################################################
 # Classes
 
@@ -35,6 +45,13 @@ class HttpConnectionWriter(object):
                   status  = "HTTP/1.1 200 OK",
                   headers = None,
                   chunksize = 64):
+        if headers is None:
+            headers = OrderedDict()
+        if not 'Content-Type' in headers.keys():
+            #determine MIME types based on extension
+            ext = filename.split("/")[-1].split(".")[-1]
+            mtype = MIME_TYPES.get(ext,DEFAULT_MIME_TYPE)
+            headers['Content-Type'] = mtype
         #wrap the file in a generator
         def gen_tmp():
             with open(filename, 'r') as f:
@@ -44,7 +61,7 @@ class HttpConnectionWriter(object):
                         return
                     yield chunk
         tmp = gen_tmp()
-        self.render_template(tmp)
+        self.render_template(tmp, headers=headers)
         
     def send_json(self, resp):
         tmp = Template(text=json.dumps(resp))

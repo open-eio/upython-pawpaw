@@ -1,11 +1,14 @@
 import time, socket
 
+import gc
+
 try:
     import sys
     from sys import print_exception #micropython specific
 except ImportError:
     import traceback
-    print_exception = lambda exc: traceback.print_exc()
+    print_exception = lambda exc, file_: traceback.print_exc(file=file_)
+
 
 try:
     from collections import OrderedDict
@@ -17,6 +20,7 @@ try:
 except ImportError:
     import ujson as json #micropython specific
     
+    
 from .template_engine import Template, LazyTemplate
 from .http_connection_reader import HttpConnectionReader
 from .http_connection_writer import HttpConnectionWriter
@@ -25,8 +29,6 @@ DEBUG = False
 DEBUG = True
 ################################################################################
 # Classes
-class HttpRequest(object):
-    __slots__ = 'method','path','args','headers','client_address'
 
 #-------------------------------------------------------------------------------
 class HttpServer(object):
@@ -89,16 +91,21 @@ class HttpServer(object):
                 mem_info()
             except ImportError:
                 pass
-        phase = "listening for connection"
-        if DEBUG:
-            print("\t%s" % phase)
-        client_sock, client_address = self.socket.accept()
-        phase = "accepted connection from '%s'" % (client_address,)
-        if DEBUG:
-            print("\t%s" % phase)
-        conn_rfile = client_sock.makefile('rb', self.rbufsize)
-        conn_wfile = client_sock.makefile('wb', self.wbufsize)
+        client_sock = None
+        client_address = None
+        conn_rfile = None
+        conn_wfile = None
+        request = None
         try:
+            phase = "listening for connection"
+            if DEBUG:
+                print("\t%s" % phase)
+            client_sock, client_address = self.socket.accept()
+            phase = "accepted connection from '%s'" % (client_address,)
+            if DEBUG:
+                print("\t%s" % phase)
+            conn_rfile = client_sock.makefile('rb', self.rbufsize)
+            conn_wfile = client_sock.makefile('wb', self.wbufsize)
             #-------------------------------------------------------------------
             #reading request phase
             #on micropython makefile does nothing returns a usocket.socket obj
@@ -129,13 +136,31 @@ class HttpServer(object):
                 print("\t\thandler: %s" % handler)
             handler(conn_writer)
         except Exception as exc:
-            print('-'*40, file=sys.stderr)
-            print("Exception happened during %s" % phase, file=sys.stderr)
-            print_exception(exc,sys.stderr)
-            print('-'*40, file=sys.stderr)
+            buff = []
+            buff.append("Context: Exception caught in 'HttpServer._handle_request_noblock' during {}".format(phase))
+            if not request is None:
+                buff.append("Request:")
+                for line in request.str_lines():
+                    buff.append("    %s" % line)
+                buff.append("") #final newline
+            msg = "\n".join(buff)
+            #print out message and exception/traceback
+            print("*"*40,file=sys.stderr)
+            print("* EXCEPTION", file=sys.stderr)
+            print("-"*40,file=sys.stderr)
+            print(msg, file = sys.stderr)
+            print_exception(exc, sys.stderr)
+            print("*"*40,file=sys.stderr)
+            #log it as well
+            logger = self.app.get_logger()
+            with logger as entry:
+                entry.write(msg)
+                entry.write_exception(exc)
         finally:
-            conn_rfile.close()
-            conn_wfile.close()
-            client_sock.close()
-            import gc
+            if not conn_rfile is None:
+                conn_rfile.close()
+            if not conn_rfile is None:
+                conn_wfile.close()
+            if not client_sock is None:
+                client_sock.close()
             gc.collect()
