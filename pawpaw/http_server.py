@@ -18,6 +18,8 @@ except ImportError:
     import ujson as json #micropython specific
     
 from .template_engine import Template, LazyTemplate
+from .http_connection_reader import HttpConnectionReader
+from .http_connection_writer import HttpConnectionWriter
 
 DEBUG = False
 DEBUG = True
@@ -120,12 +122,12 @@ class HttpServer(object):
                 handler = self.app.handler_registry['DEFAULT']
             #-------------------------------------------------------------------
             # response phase
-            conn_responder = HttpConnectionResponder(conn_wfile,request)
+            conn_writer = HttpConnectionWriter(conn_wfile,request)
             phase = 'handling response'
             if DEBUG:
                 print("\t%s" % phase)
                 print("\t\thandler: %s" % handler)
-            handler(conn_responder)
+            handler(conn_writer)
         except Exception as exc:
             print('-'*40, file=sys.stderr)
             print("Exception happened during %s" % phase, file=sys.stderr)
@@ -137,222 +139,3 @@ class HttpServer(object):
             client_sock.close()
             import gc
             gc.collect()
-
-#-------------------------------------------------------------------------------
-class HttpConnectionReader(object):
-    def __init__(self, conn_rfile, client_address):
-        self.conn_rfile = conn_rfile
-        self.client_address = client_address
-
-    def parse_request(self):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE HttpConnectionReader.parse_request")
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
-        # self.rfile is a file-like object created by the handler;
-        # we can now use e.g. readline() instead of raw recv() calls
-        #parse the request header
-        request_line = str(self.conn_rfile.readline(),'utf8').strip()
-        if DEBUG:
-            print("CLIENT: %s" % request_line)
-        try:
-            method, req, protocol = request_line.split()
-        except ValueError:
-            self.handle_malformed_request_line(request_line)
-            return None
-        #split off any params if they exist
-        req = req.split("?")
-        req_path = req[0]
-        params = {}
-        if len(req) == 2:
-            items = req[1].split("&")
-            for item in items:
-                item = item.split("=")
-                if len(item) == 1:
-                    params[item[0]] = None
-                elif len(item) == 2:
-                    params[item[0]] = item[1]
-        #read the remaining request headers
-        headers = OrderedDict()
-        while True:
-            line = str(self.conn_rfile.readline(),'utf8').strip()
-            if DEBUG:
-                print("CLIENT: %r" % line)
-            if not line or line == '\r\n':
-                break
-            key, val = line.split(':',1)
-            headers[key] = val
-        #construct the request object, similar to Flask names
-        request = HttpRequest()
-        request.method  = method
-        request.path    = req_path
-        request.args    = params
-        request.headers = headers
-        request.client_address = self.client_address
-        return request
-        
-    def handle_malformed_request_line(self, request_line = ""):
-        if DEBUG:
-            print("INSIDE HANDLER name='%s' " % 'handle_malformed_request_line')
-        print("WARNING: got malformed request_line '%s'" % request_line)
-
-#-------------------------------------------------------------------------------
-class HttpConnectionResponder(object):
-    _newline_bytes = bytes("\r\n", 'utf8')
-    
-    def __init__(self, conn_wfile, request):
-        self.conn_wfile = conn_wfile
-        self.request    = request
-        
-    def send_json_response(self, resp):
-        tmp = Template(text=json.dumps(resp))
-        headers = OrderedDict()
-        headers['Content-Type'] = 'application/json'
-        self.render_template(tmp, headers = headers)
-        
-    def render_template(self, tmp,
-                        status  = "HTTP/1.1 200 OK",
-                        headers = None):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('HttpConnectionResponder.render_template'))
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
-        if headers is None:
-            headers = OrderedDict()
-        headers['Content-Type'] = headers.get('Content-Type', 'text/html')
-        # test if we can iterate over tmp to produce output text
-        # the follow is a hueristic iterablility test that works for generators
-        # and other iterable containers on upython
-        tmp_isiterable = False
-        if tmp is iter(tmp):
-            if hasattr(tmp,'__next__') or hasattr(tmp,'next'):
-                #tests pass here
-                tmp_isiterable = True
-            
-        if tmp_isiterable:
-            #use chunked transfer coding for an iterable template
-            headers['Transfer-Encoding'] = 'chunked'
-            #send headers
-            self.send_response_headers(status, headers)
-            #send in chunks
-            self.send_by_chunks(tmp)
-        else:
-            content = tmp.render().read() #read the StringIO or stream interface
-            #compute and send using Content-Length
-            headers['Content-Length'] = "%d" % len(content)
-            #send headers
-            self.send_response_headers(status, headers)
-            #send all at once
-            self.send(content)
-        if DEBUG:
-            print("LEAVING METHOD name='%s' " % ('HttpConnectionResponder.render_template'))
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
-        
-    def send_response_headers(self, status, headers):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('HttpConnectionResponder.send_response_headers'))
-        w  = self.conn_wfile.write
-        nl = self._newline_bytes
-        w(bytes(status.rstrip(),'utf8'))
-        w(nl)
-        for key, val in headers.items():
-            line = "%s: %s" % (key.strip(),val.strip())
-            w(bytes(line,'utf8'))
-            w(nl)
-        #IMPORTANT final blank line
-        w(nl)
-        
-    def send(self, content):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('HttpConnectionResponder.send'))
-        self.conn_wfile.write(bytes(content,'utf8'))
-        self._flush()
-        
-    def send_by_chunks(self, chunk_iter):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s'" % ('HttpConnectionResponder.send_by_chunks'))
-        w  = self.conn_wfile.write
-        nl = self._newline_bytes
-        for chunk in chunk_iter:
-            w(bytes("%X" % len(chunk),'utf8')) #chunk size specified in hexadecimal
-            w(nl)
-            w(bytes(chunk,'utf8'))
-            w(nl)
-        #IMPORTANT chunk trailer
-        w(b"0")
-        w(nl)
-        w(nl)
-        self._flush()
-        
-    def _flush(self):
-        # in micropython makefile is a no-op, so wfile is still a 
-        # usocket.socket object and thus has no flush method
-        try:
-            self.conn_wfile.flush()
-        except AttributeError:
-            #on the first error this method gets replaced with a no-op
-            self._flush = lambda: None
-################################################################################
-# TEST  CODE
-################################################################################
-#if __name__ == "__main__":
-#    SERVER_IP   = '0.0.0.0'
-#    SERVER_PORT = 9999
-#    
-#    #---------------------------------------------------------------------------
-#    class TestPawpawApp(HttpRequestHandler):
-#        @route("/")
-#        def index(self):
-#            if DEBUG:
-#                print("INSIDE HANDLER name='%s' " % ('index'))
-#            try:
-#                from collections import OrderedDict
-#            except ImportError: 
-#                from ucollections import OrderedDict #micropython specific
-#            import mock_machine as machine
-#    
-#            #test a complete template
-#            pins_tmp   = LazyTemplate.from_file("templates/pins.html_template")
-#            ptr_tmp    =     Template.from_file("templates/pins_table_row.html_template")
-#            pins_jstmp = LazyTemplate.from_file("templates/pins.js_template")
-#            
-#            PIN_NUMBERS = (0, 2, 4, 5, 12, 13, 14, 15)
-#            PINS = OrderedDict((i,machine.Pin(i, machine.Pin.IN)) for i in PIN_NUMBERS)
-#            PINS[0].value = True
-#            PINS[5].value = True
-#            #we make table content a generator that produces one row per iteration
-#            def gen_table_content(pins):
-#                for pin_num, pin in pins.items():
-#                    ptr_tmp.format(pin_id = str(pin),
-#                                   pin_value = 'HIGH' if pin.value() else 'LOW',
-#                                  )
-#                    for line in ptr_tmp.render():
-#                        yield line
-#            pins_jstmp.format(server_addr = "0.0.0.0")
-#            pins_tmp.format(table_content = gen_table_content(PINS),
-#                            comment='This is a test page!',
-#                            javascript = pins_jstmp)
-#            #finally render the view
-#            self.render_template(pins_tmp)
-#    #---------------------------------------------------------------------------
-#    # Create the server, binding to localhost on port 9999
-#    server = TCPServer((SERVER_IP, SERVER_PORT), TestPawpawApp)
-
-#    # Activate the server; this will keep running until you
-#    # interrupt the program with Ctrl-C
-#    server.serve_forever()
