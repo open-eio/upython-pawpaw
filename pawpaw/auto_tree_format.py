@@ -2,6 +2,8 @@ try:
     import json
 except ImportError:
     import ujson as json #micropython specific
+    
+from . import urllib_parse
 
 class AutoTreeFormat(object):
     def __init__(self, tree):
@@ -61,7 +63,6 @@ class AutoTreeFormat(object):
         def lnode_func(ln):
             buff.append('value="%s"></div>\n' % (ln,))
             return (ln,)
-            
 
         for node in self._recur_walk(inner_node_func = inode_func,
                                      after_node_func = anode_func,
@@ -101,6 +102,27 @@ class AutoTreeFormat(object):
         d = json.loads(f.read())
         return cls(tree=d)
         
+def parse_form_url(urlencoded_form):
+    form_items = urllib_parse.parse_qsl(urlencoded_form)
+    d = {}
+    for path, value in form_items:
+        p = d
+        names = path.split(".")
+        for name in names[:-1]:
+            c = p.get(name,{})
+            p[name] = c
+            p = c
+        try:
+            #convert string into a python type, safely
+            value = eval(value,{"__builtins__":None},{})
+        except NameError:
+            pass
+        except TypeError:
+            pass
+        #otherwise keep as string
+        p[names[-1]] = value
+    return d
+    
 ################################################################################
 # TEST CODE
 ################################################################################

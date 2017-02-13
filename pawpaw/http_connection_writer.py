@@ -147,9 +147,11 @@ class HttpConnectionWriter(object):
         w  = self._conn_wfile.write
         nl = self._newline_bytes
         for chunk in chunk_iter:
-            w(bytes("%X" % len(chunk),'utf8')) #chunk size specified in hexadecimal
+            chunk_bytes = bytes(chunk,'utf8')
+            chunk_len = len(chunk_bytes)     #IMPORTANT, encode before counting!
+            w(bytes("%X" % chunk_len,'utf8')) #chunk size specified in hexadecimal
             w(nl)
-            w(bytes(chunk,'utf8'))
+            w(chunk_bytes)
             w(nl)
         #IMPORTANT chunk trailer
         w(b"0")
