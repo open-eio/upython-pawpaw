@@ -122,10 +122,12 @@ class LazyTemplate(BaseTemplate):
         
     def __init__(self, textio,
                  tag_replacements = None,
-                 newline = '\n',
+                 endline = '\n',
+                 rstrip_lines = True,
                  ):
         BaseTemplate.__init__(self, tag_replacements)
-        self._newline = newline
+        self._endline = endline
+        self._rstrip_lines = rstrip_lines
         self._line_num = 0
         self._current_indent = "" #should only hold whitespace chars
         self._textio = textio   #this is file-like
@@ -153,8 +155,10 @@ class LazyTemplate(BaseTemplate):
             self._current_indent = m.group(1)
             #replace tags iteratively
             for rep_line in self._replace_tags(line):
-                #trim dangling whitespace from right and put back one newline
-                yield rep_line.rstrip() + self._newline
+                if self._rstrip_lines:
+                    #trim dangling whitespace from right and put back one endline
+                    rep_line = rep_line.rstrip() + self._endline
+                yield rep_line
     
     def __str__(self):
         return repr(self)
@@ -235,12 +239,12 @@ class LazyTemplate(BaseTemplate):
         self._textio.close()
         
     @classmethod
-    def from_file(cls, filename):
-        return cls(textio = open(filename,'r'))
+    def from_file(cls, filename, **kwargs):
+        return cls(textio = open(filename,'r'), **kwargs)
         
     @classmethod
-    def from_text(cls, text):
-        return cls(textio = StringIO(text))
+    def from_text(cls, text, **kwargs):
+        return cls(textio = StringIO(text), **kwargs)
         
 ################################################################################
 # TEST CODE
