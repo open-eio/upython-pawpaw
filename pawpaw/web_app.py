@@ -65,7 +65,7 @@ def Router(cls):
             if handler_registry is None:
                 handler_registry = OrderedDict()
             def bind_method(m):
-                return (lambda *args, **kwargs: m(self,*args,**kwargs))
+                return (lambda *args2, **kwargs2: m(self,*args2,**kwargs2))
             #bind self to all of the route handlers
             for key, unbound_handler in type(self)._unbound_handler_registry.items():
                 handler_registry[key] = handler = bind_method(unbound_handler)
@@ -137,7 +137,8 @@ class WebApp(object):
                  server_addr,
                  server_port,
                  handler_registry,
-                 log_filename = DEFAULT_LOG_FILENAME
+                 log_filename = DEFAULT_LOG_FILENAME,
+                 socket_timeout = None,  #default is BLOCKING
                 ):
         if DEBUG:
             print("INSIDE WebApp.__init__:")
@@ -155,7 +156,7 @@ class WebApp(object):
         self.handler_registry = handler_registry
         self.log_filename = log_filename
         addr = (self.server_addr, self.server_port)
-        self._server = HttpServer(addr,app=self)
+        self._server = HttpServer(addr,app=self,timeout=socket_timeout)
         
     def serve_forever(self):
         if DEBUG:

@@ -12,7 +12,7 @@ try:
 except ImportError: 
     from ucollections import OrderedDict #micropython specific
     
-from . import urllib_parse
+#from . import urllib_parse
 
 DEBUG = False
 DEBUG = True
@@ -34,34 +34,31 @@ class HttpConnectionReader(object):
         self.client_address = client_address
 
     def parse_request(self):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE HttpConnectionReader.parse_request")
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
         # self.rfile is a file-like object created by the handler;
         # we can now use e.g. readline() instead of raw recv() calls
         #parse the request header
         request_line = str(self._conn_rfile.readline(),'utf8').strip()
-        if DEBUG:
-            print("CLIENT: %s" % request_line)
         try:
             method, req_url, protocol = request_line.split()
         except ValueError:
             self.handle_malformed_request_line(request_line)
             return None
-        req = urllib_parse.urlparse(req_url)
-        #split off any query params if they exist
-        params = urllib_parse.parse_qs(req.query)
+        #split off any params if they exist
+        req = req.split("?")
+        req_path = req[0]
+        params = {}
+        if len(req) == 2:
+            items = req[1].split("&")
+            for item in items:
+                item = item.split("=")
+                if len(item) == 1:
+                    params[item[0]] = None
+                elif len(item) == 2:
+                    params[item[0]] = item[1]
         #read the remaining request headers
         headers = OrderedDict()
         while True:
             line = str(self._conn_rfile.readline(),'utf8').strip()
-            if DEBUG:
-                print("CLIENT req.headers: %r" % line)
             if not line or line == '\r\n':
                 break
             key, val = line.split(':',1)
@@ -72,13 +69,11 @@ class HttpConnectionReader(object):
             clen = headers.get('Content-Length')
             if not clen is None:
                 body = str(self._conn_rfile.read(int(clen)),'utf8')
-                if DEBUG:
-                    print("CLIENT req.body: %s" % body)
         
         #construct the request object, similar to Flask names
         request = HttpRequest()
         request.method  = method
-        request.path    = req.path
+        request.path    = req_path
         request.args    = params
         request.headers = headers
         request.client_address = self.client_address
@@ -86,7 +81,5 @@ class HttpConnectionReader(object):
         return request
         
     def handle_malformed_request_line(self, request_line = ""):
-        if DEBUG:
-            print("INSIDE HANDLER name='%s' " % 'handle_malformed_request_line')
         print("WARNING: got malformed request_line '%s'" % request_line)
 

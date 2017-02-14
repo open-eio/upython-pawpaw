@@ -42,7 +42,10 @@ class HttpServer(object):
     
     handler_registry = OrderedDict()
 
-    def __init__(self, server_address, app, bind_and_activate=True):
+    def __init__(self, server_address, app,
+                 bind_and_activate=True,
+                 timeout = None, #default is BLOCKING
+                 ):
         #BaseServer.__init__(self, server_address, RequestHandlerClass)
         self.server_address = server_address
         self.app = app
@@ -51,6 +54,7 @@ class HttpServer(object):
         
         self.socket = socket.socket(self.address_family,
                                     self.socket_type)
+        self.socket.settimeout(timeout)
         if bind_and_activate:
             try:
                 self.server_bind()
@@ -74,7 +78,7 @@ class HttpServer(object):
         #FIXME self.__is_shut_down.clear()
         try:
             while not self.__shutdown_request:
-                self._handle_request_noblock()
+                self.handle_request()
         finally:
             self.__shutdown_request = False
             #FIXME self.__is_shut_down.set()
@@ -83,14 +87,7 @@ class HttpServer(object):
         self.__shutdown_request = True
         #FIXME self.__is_shut_down.wait()
 
-    def _handle_request_noblock(self):
-        if DEBUG:
-            print("INSIDE HttpServer._handle_request_noblock")
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
+    def handle_request(self):
         client_sock = None
         client_address = None
         conn_rfile = None
@@ -98,12 +95,8 @@ class HttpServer(object):
         request = None
         try:
             phase = "listening for connection"
-            if DEBUG:
-                print("\t%s" % phase)
             client_sock, client_address = self.socket.accept()
             phase = "accepted connection from '%s'" % (client_address,)
-            if DEBUG:
-                print("\t%s" % phase)
             conn_rfile = client_sock.makefile('rb', self.rbufsize)
             conn_wfile = client_sock.makefile('wb', self.wbufsize)
             #-------------------------------------------------------------------
@@ -111,19 +104,13 @@ class HttpServer(object):
             #on micropython makefile does nothing returns a usocket.socket obj
             conn_reader = HttpConnectionReader(conn_rfile, client_address)
             phase = 'reading request'
-            if DEBUG:
-                print("\t%s" % phase)
             request = conn_reader.parse_request()
             #-------------------------------------------------------------------
             # handler lookup phase
             phase = 'handler lookup'
-            if DEBUG:
-                print("\t%s" % phase)
             handler = None
             if not request is None:
                 key = "%s %s" % (request.method, request.path)
-                if DEBUG:
-                    print("\t\tkey: %r" % key)
                 handler = self.app.handler_registry.get(key)
             if handler is None:
                 handler = self.app.handler_registry['DEFAULT']
@@ -131,10 +118,14 @@ class HttpServer(object):
             # response phase
             conn_writer = HttpConnectionWriter(conn_wfile,request)
             phase = 'handling response'
-            if DEBUG:
-                print("\t%s" % phase)
-                print("\t\thandler: %s" % handler)
             handler(conn_writer)
+            return True  #signify that a request was successfully handled
+        except OSError as exc:
+            import errno
+            if exc.errno == errno.ETIMEDOUT:
+                return False  #signify that no request handled
+            else:
+                raise
         except Exception as exc:
             buff = []
             buff.append("Context: Exception caught in 'HttpServer._handle_request_noblock' during {}".format(phase))

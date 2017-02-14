@@ -3,7 +3,7 @@ try:
 except ImportError:
     import ujson as json #micropython specific
     
-from . import urllib_parse
+#from . import urllib_parse
 
 class AutoTreeFormat(object):
     def __init__(self, tree):

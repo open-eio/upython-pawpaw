@@ -72,14 +72,6 @@ class HttpConnectionWriter(object):
     def render_template(self, tmp,
                         status  = "HTTP/1.1 200 OK",
                         headers = None):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('HttpConnectionResponder.render_template'))
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
         if headers is None:
             headers = OrderedDict()
         headers['Content-Type'] = headers.get('Content-Type', 'text/html')
@@ -110,18 +102,8 @@ class HttpConnectionWriter(object):
             self._send_response_headers(status, headers)
             #send all at once
             self._send(content)
-        if DEBUG:
-            print("LEAVING METHOD name='%s' " % ('HttpConnectionResponder.render_template'))
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
         
     def _send_response_headers(self, status, headers):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('HttpConnectionResponder.send_response_headers'))
         w  = self._conn_wfile.write
         nl = self._newline_bytes
         w(bytes(status.rstrip(),'utf8'))
@@ -134,16 +116,10 @@ class HttpConnectionWriter(object):
         w(nl)
         
     def _send(self, content):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s' " % ('HttpConnectionResponder.send'))
         self._conn_wfile.write(bytes(content,'utf8'))
         self._flush()
         
     def _send_by_chunks(self, chunk_iter):
-        global DEBUG
-        if DEBUG:
-            print("INSIDE METHOD name='%s'" % ('HttpConnectionResponder.send_by_chunks'))
         w  = self._conn_wfile.write
         nl = self._newline_bytes
         for chunk in chunk_iter:

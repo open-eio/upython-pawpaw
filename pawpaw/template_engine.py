@@ -22,7 +22,6 @@ RE_INDENT = re.compile(r"^(\s*).*$")
 RE_EXPRESSION_TAG = re.compile(r"{{\s(\w+)\s}}")
 
 def scan_tag(text, at_pos = 0):
-    global DEBUG
     tag_start_pos = text.find(EXPRESSION_TAG_OPEN, at_pos)
     if tag_start_pos == -1: #no tags found
         return (-1,-1, None)
@@ -32,8 +31,6 @@ def scan_tag(text, at_pos = 0):
         raise SyntaxError("@pos %d: missing EXPRESSION_TAG_CLOSE '%r'" % (at_pos,EXPRESSION_TAG_CLOSE))
     tag = text[tag_start_pos : tag_end_pos]
     at_pos = tag_end_pos
-    if DEBUG:
-        print("@pos = %d: FOUND TAG: %s" % (at_pos,tag))
     m = RE_EXPRESSION_TAG.match(tag)
     if not m:
         raise SyntaxError("@pos %d: malformed tag '%s' needs to match '%r'" % (at_pos,tag, RE_EXPRESSION_TAG))
@@ -81,13 +78,9 @@ class Template(BaseTemplate):
             rep = self._tag_replacements.get(tag_name)
             if not rep is None:
                 lead_text = self._text[at_pos:tag_start_pos]
-                if DEBUG:
-                    print("@pos %d TEXT: %r" % (at_pos,lead_text))
                 #put leading text into buffer
                 buff.append(lead_text)
                 at_pos = tag_start_pos
-                if DEBUG:
-                    print("@pos %d REPLACING TAG '%s' -> '%s'" % (at_pos,tag_name,rep))
                 #splice in replacement
                 buff.append(str(rep))
             else:
@@ -170,10 +163,6 @@ class LazyTemplate(BaseTemplate):
         
     def _replace_tags(self, line):
         #NOTE this a a generator which yields when a 
-        global DEBUG
-        if DEBUG:
-            print("LINE %d, indent %r: %r" % (self._line_num, self._current_indent, line))
-        
         #rline = line
         at_pos = 0
         while True:
@@ -192,8 +181,6 @@ class LazyTemplate(BaseTemplate):
             
             rep = self._tag_replacements.get(tag_name)
             if not rep is None:
-                if DEBUG:
-                    print("REPLACING TAG '%s' -> '%s'" % (tag_name,rep))
                 #break the line in pre-tag and post-tag parts
                 pre_tag_line  = line[:tag_start_pos]
                 post_tag_line = line[tag_end_pos:]
@@ -209,8 +196,6 @@ class LazyTemplate(BaseTemplate):
                         #tests pass here
                         rep_isiterable = True
                 if rep_isiterable:
-                    if DEBUG:
-                        print("SPLICING IN ITERABLE")
                     #we must chain in the sub-template
                     first_line = pre_tag_line + next(rep) #first line should already have indentation
                     yield first_line
@@ -221,8 +206,6 @@ class LazyTemplate(BaseTemplate):
                     #reduce the line to the remaining portion
                     line = post_tag_line.strip() #trim any dangling whitespace
                     at_pos = 0 #start scan a beginning of the reduced line
-                    if DEBUG:
-                        print("END SPLICING ITERABLE")
                 else:
                     rep = str(rep)
                     #just a simple string replacement
@@ -230,8 +213,6 @@ class LazyTemplate(BaseTemplate):
                     at_pos = tag_end_pos #start next scan after this tag
             else:
                 #just continue as if nothing is wrong ;)
-                if DEBUG:
-                    print("UNRECOGNIZED TAG '%s'" % (tag_name,))
                 at_pos = tag_end_pos #start next scan after this tag
             #continue loop with the remaining line
     
