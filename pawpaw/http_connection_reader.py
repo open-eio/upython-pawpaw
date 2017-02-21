@@ -19,7 +19,7 @@ DEBUG = True
 ################################################################################
 # Classes
 class HttpRequest(object):
-    __slots__ = 'method','path','args','headers','client_address', 'body'
+    __slots__ = 'method','path','match','args','headers','client_address','body'
     def str_lines(self):
         buff = []
         for attr in self.__slots__:
@@ -68,6 +68,7 @@ class HttpConnectionReader(object):
         request = HttpRequest()
         request.method  = method
         request.path    = req_path
+        request.match   = None
         request.args    = params
         request.headers = headers
         request.client_address = self.client_address

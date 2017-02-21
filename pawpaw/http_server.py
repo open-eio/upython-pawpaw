@@ -119,22 +119,36 @@ class HttpServer(object):
             conn_reader = HttpConnectionReader(conn_rfile, client_address)
             phase = 'reading request'
             request = conn_reader.parse_request()
-            if DEBUG:
-                print("INSIDE 'http_server.handle_request' during %s:" % phase)
-                print("\trequest: %s" % request)
             #-------------------------------------------------------------------
             # handler lookup phase
-            phase = 'handler lookup'
+            phase = 'handler lookup path'
             handler = None
             if not request is None:
-                key = "%s %s" % (request.method, request.path)
-                handler = self.app.path_handler_registry.get(key)
+                meth_paths = self.app.path_handler_registry.get(request.method, {})
+                handler = meth_paths.get(request.path)
+            #could not match a path directly
             if handler is None:
-                handler = self.app.path_handler_registry['DEFAULT']
+                # try matching against all regex handlers
+                phase = 'handler lookup regex'
+                match = None
+                meth_regexs = self.app.regex_handler_registry.get(request.method, {})
+                for repr_regex, data in meth_regexs.items():
+                    regex, h = data
+                    match = regex.match(request.path)
+                    if not match is None:
+                        request.match = match
+                        handler = h
+                        break
+                else:
+                    #default no other handler matched
+                    handler = self.app.path_handler_registry['DEFAULT']
             #-------------------------------------------------------------------
             # response phase
             conn_writer = HttpConnectionWriter(conn_wfile,request)
             phase = 'handling response'
+            if DEBUG:
+                print("INSIDE 'http_server.handle_request' during %s:" % phase)
+                print("\trequest: %s" % request)
             handler(conn_writer)
             return True  #signify that a request was successfully handled
         except OSError as exc:

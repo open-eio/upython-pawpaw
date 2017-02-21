@@ -63,7 +63,7 @@ class route(object):
             # regex handlers
             if not self.regex is None:
                 meth_regexs = self.registered_regexs.get(req_method,OrderedDict())
-                meth_regexs[repr(self.regex)] = func
+                meth_regexs[repr(self.regex)] = (self.regex, func)
                 if DEBUG:
                     print("@route REGISTERING REGEX HANDLER in registered_regexs['%s']['%s'] as func: %s" % (req_method,self.regex,func))
                 self.registered_regexs[req_method] = meth_regexs
@@ -97,8 +97,8 @@ def Router(cls):
             for req_method in uphr.keys(): #each req_method has a subdict of registered paths
                 uphr_rm = uphr[req_method]
                 phr_rm  = phr.get(req_method, OrderedDict())
-                for path, unbound_path_handler in uphr_rm.items():
-                    phr_rm[path] = handler = bind_method(unbound_path_handler)
+                for path, unbound_handler in uphr_rm.items():
+                    phr_rm[path] = handler = bind_method(unbound_handler)
                     if DEBUG:
                         print("@Router BOUND HANDLER in path_handler_registry['%s']['%s'] as func: %s" % (req_method,path,handler))
                 phr[req_method] = phr_rm
@@ -117,8 +117,10 @@ def Router(cls):
             for req_method in urhr.keys(): #each req_method has a subdict of registered regexs
                 urhr_rm = urhr[req_method]
                 rhr_rm  = rhr.get(req_method, OrderedDict())
-                for regex, unbound_regex_handler in urhr_rm.items():
-                    rhr_rm[repr(regex)] = handler = bind_method(unbound_regex_handler)
+                for repr_regex, data in urhr_rm.items():
+                    regex, unbound_handler = data
+                    handler = bind_method(unbound_handler)
+                    rhr_rm[repr_regex] = (regex,handler)
                     if DEBUG:
                         print("@Router BOUND HANDLER in regex_handler_registry['%s']['%s'] as func: %s" % (req_method,regex,handler))
                 rhr[req_method] = rhr_rm
