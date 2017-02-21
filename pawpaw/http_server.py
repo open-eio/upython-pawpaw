@@ -43,7 +43,7 @@ class HttpServer(object):
     handler_registry = OrderedDict()
 
     def __init__(self, server_address, app,
-                 bind_and_activate=True,
+                 init_socket = True,
                  timeout = None, #default is BLOCKING
                  ):
         #BaseServer.__init__(self, server_address, RequestHandlerClass)
@@ -51,17 +51,20 @@ class HttpServer(object):
         self.app = app
         self.__is_shut_down = None #FIXME threading.Event()
         self.__shutdown_request = False
-        
+        self._timeout = timeout
         self.socket = socket.socket(self.address_family,
                                     self.socket_type)
-        self.socket.settimeout(timeout)
-        if bind_and_activate:
-            try:
-                self.server_bind()
-                self.server_activate()
-            except:
-                self.socket.close()
-                raise
+        if init_socket:
+            self.init_socket()
+    
+    def init_socket(self):
+        self.socket.settimeout(self._timeout)
+        try:
+            self.server_bind()
+            self.server_activate()
+        except:
+            self.socket.close()
+            raise
         
     def server_bind(self):
         if self.allow_reuse_address:
@@ -72,7 +75,18 @@ class HttpServer(object):
         self.server_address = addr
 
     def server_activate(self):
-        self.socket.listen(self.request_queue_size)
+        try:
+            self.socket.listen(self.request_queue_size)
+        except OSError as exc:
+            gc.collect()
+            import errno
+            if exc.args[0] == errno.ENOMEM:
+                #listener is already registered
+                print("WARNING: handling %s" % exc)
+                self.socket.close()
+                self.init_socket()
+            else:
+                raise
         
     def serve_forever(self, poll_interval=0.5):
         #FIXME self.__is_shut_down.clear()
@@ -105,15 +119,18 @@ class HttpServer(object):
             conn_reader = HttpConnectionReader(conn_rfile, client_address)
             phase = 'reading request'
             request = conn_reader.parse_request()
+            if DEBUG:
+                print("INSIDE 'http_server.handle_request' during %s:" % phase)
+                print("\trequest: %s" % request)
             #-------------------------------------------------------------------
             # handler lookup phase
             phase = 'handler lookup'
             handler = None
             if not request is None:
                 key = "%s %s" % (request.method, request.path)
-                handler = self.app.handler_registry.get(key)
+                handler = self.app.path_handler_registry.get(key)
             if handler is None:
-                handler = self.app.handler_registry['DEFAULT']
+                handler = self.app.path_handler_registry['DEFAULT']
             #-------------------------------------------------------------------
             # response phase
             conn_writer = HttpConnectionWriter(conn_wfile,request)
@@ -122,13 +139,15 @@ class HttpServer(object):
             return True  #signify that a request was successfully handled
         except OSError as exc:
             import errno
-            if exc.errno == errno.ETIMEDOUT:
+            if exc.args[0] == errno.ETIMEDOUT:
+                #if DEBUG:
+                #    print("HttpServer.handle_request: timedout during {}".format(phase))
                 return False  #signify that no request handled
             else:
                 raise
         except Exception as exc:
             buff = []
-            buff.append("Context: Exception caught in 'HttpServer._handle_request_noblock' during {}".format(phase))
+            buff.append("Context: Exception caught in 'HttpServer.handle_request' during {}".format(phase))
             if not request is None:
                 buff.append("Request:")
                 for line in request.str_lines():
