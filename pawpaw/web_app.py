@@ -51,13 +51,22 @@ class route(object):
         #this runs upon decoration immediately after __init__
         #add the method to the handler_registry with path as key
         for req_method in self.req_methods:
-            #key = "%s %s" % (req_method, self.path)
+            #-------------------------------------------------------------------
+            # path handlers
             if not self.path is None:
                 meth_paths = self.registered_paths.get(req_method,OrderedDict())
                 meth_paths[self.path] = func
                 if DEBUG:
                     print("@route REGISTERING PATH HANDLER in registered_paths['%s']['%s'] as func: %s" % (req_method,self.path,func))
                 self.registered_paths[req_method] = meth_paths
+            #-------------------------------------------------------------------
+            # regex handlers
+            if not self.regex is None:
+                meth_regexs = self.registered_regexs.get(req_method,OrderedDict())
+                meth_regexs[repr(self.regex)] = func
+                if DEBUG:
+                    print("@route REGISTERING REGEX HANDLER in registered_regexs['%s']['%s'] as func: %s" % (req_method,self.regex,func))
+                self.registered_regexs[req_method] = meth_regexs
         return func
 
 #-------------------------------------------------------------------------------
@@ -71,15 +80,17 @@ def Router(cls):
     
     class RouterWrapped(cls):
         #update the private class to contain all currently registered routes
-        _unbound_path_handler_registry = route.registered_paths.copy()
+        _unbound_path_handler_registry  = route.registered_paths.copy()
+        _unbound_regex_handler_registry = route.registered_regexs.copy()
         def __init__(self,*args,**kwargs):
-            path_handler_registry = kwargs.get("path_handler_registry")
-            if path_handler_registry is None:
-                path_handler_registry = OrderedDict()
             def bind_method(m):
                 return (lambda *args2, **kwargs2: m(self,*args2,**kwargs2))
             #-------------------------------------------------------------------
             # path handlers
+            path_handler_registry = kwargs.get("path_handler_registry")
+            if path_handler_registry is None:
+                path_handler_registry = OrderedDict()
+           
             #bind self to all of the route handlers
             uphr = type(self)._unbound_path_handler_registry
             phr  = path_handler_registry
@@ -96,7 +107,22 @@ def Router(cls):
             kwargs['path_handler_registry'] = path_handler_registry
             #-------------------------------------------------------------------
             # regex handlers
-            
+            regex_handler_registry = kwargs.get("regex_handler_registry")
+            if regex_handler_registry is None:
+                regex_handler_registry = OrderedDict()
+           
+            #bind self to all of the route handlers
+            urhr = type(self)._unbound_regex_handler_registry
+            rhr  = regex_handler_registry
+            for req_method in urhr.keys(): #each req_method has a subdict of registered regexs
+                urhr_rm = urhr[req_method]
+                rhr_rm  = rhr.get(req_method, OrderedDict())
+                for regex, unbound_regex_handler in urhr_rm.items():
+                    rhr_rm[repr(regex)] = handler = bind_method(unbound_regex_handler)
+                    if DEBUG:
+                        print("@Router BOUND HANDLER in regex_handler_registry['%s']['%s'] as func: %s" % (req_method,regex,handler))
+                rhr[req_method] = rhr_rm
+            kwargs['regex_handler_registry'] = regex_handler_registry
             #-------------------------------------------------------------------
             #setup the log file
             kwargs['log_filename'] = log_filename
@@ -104,7 +130,8 @@ def Router(cls):
     
     #remove the registered_routes from the route decorator class 
     #attribute space, this allows for independent routing WebApp instances
-    route.registered_routes = OrderedDict()
+    route.registered_paths = OrderedDict()
+    route.registered_regexs = OrderedDict()
     return RouterWrapped
 
 ################################################################################
@@ -161,6 +188,7 @@ class WebApp(object):
                  server_addr,
                  server_port,
                  path_handler_registry,
+                 regex_handler_registry,
                  log_filename = DEFAULT_LOG_FILENAME,
                  socket_timeout = None,  #default is BLOCKING
                 ):
@@ -179,6 +207,7 @@ class WebApp(object):
         self.server_addr = server_addr
         self.server_port = server_port
         self.path_handler_registry = path_handler_registry
+        self.regex_handler_registry = regex_handler_registry
         self.log_filename = log_filename
         addr = (self.server_addr, self.server_port)
         self._server = HttpServer(addr,app=self,timeout=socket_timeout)
