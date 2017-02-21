@@ -12,7 +12,7 @@ try:
 except ImportError: 
     from ucollections import OrderedDict #micropython specific
     
-#from . import urllib_parse
+from . import url_tools
 
 DEBUG = False
 DEBUG = True
@@ -44,17 +44,11 @@ class HttpConnectionReader(object):
             self.handle_malformed_request_line(request_line)
             return None
         #split off any params if they exist
-        req = req.split("?")
+        req = req_url.split("?")
         req_path = req[0]
         params = {}
         if len(req) == 2:
-            items = req[1].split("&")
-            for item in items:
-                item = item.split("=")
-                if len(item) == 1:
-                    params[item[0]] = None
-                elif len(item) == 2:
-                    params[item[0]] = item[1]
+             params = url_tools.parse_qs(req[1])
         #read the remaining request headers
         headers = OrderedDict()
         while True:
