@@ -6,6 +6,11 @@ try:
 except ImportError:
     import traceback
     print_exception = lambda exc, file_: traceback.print_exc(file=file_)
+    
+try:
+    import re
+except ImportError:
+    import ure as re
 
 try:
     from collections import OrderedDict
@@ -29,24 +34,31 @@ LOG_FILESIZE_LIMIT   = 2**20 #1MB
 # @route
 #a method decorator to automate handling of HTTP route dispatching
 class route(object):
-    registered_routes = OrderedDict()
+    registered_paths  = OrderedDict()
+    registered_regexs = OrderedDict()
 
-    def __init__(self, path, methods = None):
+    def __init__(self, path = None, regex = None, methods = None):
         #this runs upon decoration
         self.path = path
+        if not regex is None and not hasattr(regex, "match"):
+            regex = re.compile(regex)
+        self.regex = regex
         if methods is None:
             methods = ["GET"]
         self.req_methods = methods
         
-    def __call__(self, m):
+    def __call__(self, func):
         #this runs upon decoration immediately after __init__
         #add the method to the handler_registry with path as key
         for req_method in self.req_methods:
-            key = "%s %s" % (req_method, self.path)
-            if DEBUG:
-                print("@route REGISTERING HANDLER '%s' on method '%s'" % (key,m))
-            self.registered_routes[key] = m
-        return m
+            #key = "%s %s" % (req_method, self.path)
+            if not self.path is None:
+                meth_paths = self.registered_paths.get(req_method,OrderedDict())
+                meth_paths[self.path] = func
+                if DEBUG:
+                    print("@route REGISTERING PATH HANDLER in registered_paths['%s']['%s'] as func: %s" % (req_method,self.path,func))
+                self.registered_paths[req_method] = meth_paths
+        return func
 
 #-------------------------------------------------------------------------------
 # @Router
@@ -59,21 +71,33 @@ def Router(cls):
     
     class RouterWrapped(cls):
         #update the private class to contain all currently registered routes
-        _unbound_handler_registry = route.registered_routes.copy()
+        _unbound_path_handler_registry = route.registered_paths.copy()
         def __init__(self,*args,**kwargs):
-            handler_registry = kwargs.get("handler_registry")
-            if handler_registry is None:
-                handler_registry = OrderedDict()
+            path_handler_registry = kwargs.get("path_handler_registry")
+            if path_handler_registry is None:
+                path_handler_registry = OrderedDict()
             def bind_method(m):
                 return (lambda *args2, **kwargs2: m(self,*args2,**kwargs2))
+            #-------------------------------------------------------------------
+            # path handlers
             #bind self to all of the route handlers
-            for key, unbound_handler in type(self)._unbound_handler_registry.items():
-                handler_registry[key] = handler = bind_method(unbound_handler)
-                if DEBUG:
-                    print("@Router BOUND HANDLER key='%s': %s" % (key,handler))
+            uphr = type(self)._unbound_path_handler_registry
+            phr  = path_handler_registry
+            for req_method in uphr.keys(): #each req_method has a subdict of registered paths
+                uphr_rm = uphr[req_method]
+                phr_rm  = phr.get(req_method, OrderedDict())
+                for path, unbound_path_handler in uphr_rm.items():
+                    phr_rm[path] = handler = bind_method(unbound_path_handler)
+                    if DEBUG:
+                        print("@Router BOUND HANDLER in path_handler_registry['%s']['%s'] as func: %s" % (req_method,path,handler))
+                phr[req_method] = phr_rm
             #bind the default handler
-            handler_registry['DEFAULT'] = bind_method(type(self).handle_default)
-            kwargs['handler_registry'] = handler_registry
+            path_handler_registry['DEFAULT'] = bind_method(type(self).handle_default)
+            kwargs['path_handler_registry'] = path_handler_registry
+            #-------------------------------------------------------------------
+            # regex handlers
+            
+            #-------------------------------------------------------------------
             #setup the log file
             kwargs['log_filename'] = log_filename
             cls.__init__(self,*args, **kwargs)
@@ -136,7 +160,7 @@ class WebApp(object):
     def __init__(self,
                  server_addr,
                  server_port,
-                 handler_registry,
+                 path_handler_registry,
                  log_filename = DEFAULT_LOG_FILENAME,
                  socket_timeout = None,  #default is BLOCKING
                 ):
@@ -144,6 +168,7 @@ class WebApp(object):
             print("INSIDE WebApp.__init__:")
             print("\tserver_addr: %s" % server_addr)
             print("\tserver_port: %s" % server_port)
+            print("\tsocket_timeout: %s" % socket_timeout)
             try:
                 from micropython import mem_info
                 mem_info()
@@ -153,26 +178,24 @@ class WebApp(object):
         # Create the server, binding to localhost on port 9999
         self.server_addr = server_addr
         self.server_port = server_port
-        self.handler_registry = handler_registry
+        self.path_handler_registry = path_handler_registry
         self.log_filename = log_filename
         addr = (self.server_addr, self.server_port)
         self._server = HttpServer(addr,app=self,timeout=socket_timeout)
         
     def serve_forever(self):
-        if DEBUG:
-            print("INSIDE WebApp.serve_forever")
-            try:
-                from micropython import mem_info
-                mem_info()
-            except ImportError:
-                pass
         # Activate the server; this will keep running until you
         # interrupt the program with Ctrl-C
         self._server.serve_forever()
+        
+    def serve_once(self):
+        # For success True will be returned, otherwise (timedout) False
+        return self._server.handle_request()
     
     def handle_default(self, context):
         if DEBUG:
-            print("INSIDE HANDLER name='%s' " % ('HttpConnectionResponder.handle_default'))
+            print("INSIDE ROUTE HANDLER 'WebApp.handle_default'")
+            print("context.request:\n%s" % context.request)
         context.send_file("html/404.html")
         
     def get_logger(self):
