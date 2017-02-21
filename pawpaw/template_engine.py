@@ -19,7 +19,7 @@ EXPRESSION_TAG_OPEN  = "{{"
 EXPRESSION_TAG_CLOSE = "}}"
 
 RE_INDENT = re.compile(r"^(\s*).*$")
-RE_EXPRESSION_TAG = re.compile(r"{{\s(\w+)\s}}")
+RE_EXPRESSION_TAG = re.compile(r"{{\s*(\w+)\s*}}")
 
 def scan_tag(text, at_pos = 0):
     tag_start_pos = text.find(EXPRESSION_TAG_OPEN, at_pos)
