@@ -1,4 +1,4 @@
-import time, socket
+import time, socket, errno
 
 import gc
 
@@ -107,58 +107,67 @@ class HttpServer(object):
         conn_rfile = None
         conn_wfile = None
         request = None
+        #outer block handles all exceptions and logs them
         try:
-            phase = "listening for connection"
-            client_sock, client_address = self.socket.accept()
-            phase = "accepted connection from '%s'" % (client_address,)
-            conn_rfile = client_sock.makefile('rb', self.rbufsize)
-            conn_wfile = client_sock.makefile('wb', self.wbufsize)
-            #-------------------------------------------------------------------
-            #reading request phase
-            #on micropython makefile does nothing returns a usocket.socket obj
-            conn_reader = HttpConnectionReader(conn_rfile, client_address)
-            phase = 'reading request'
-            request = conn_reader.parse_request()
-            #-------------------------------------------------------------------
-            # handler lookup phase
-            phase = 'handler lookup path'
-            handler = None
-            if not request is None:
-                meth_paths = self.app.path_handler_registry.get(request.method, {})
-                handler = meth_paths.get(request.path)
-            #could not match a path directly
-            if handler is None:
-                # try matching against all regex handlers
-                phase = 'handler lookup regex'
-                match = None
-                meth_regexs = self.app.regex_handler_registry.get(request.method, {})
-                for repr_regex, data in meth_regexs.items():
-                    regex, h = data
-                    match = regex.match(request.path)
-                    if not match is None:
-                        request.match = match
-                        handler = h
-                        break
+            #inner block handles OSError, looking for timeouts otherwise 
+            #reraising them for outer block to catch
+            try:
+                phase = "listening for connection"
+                client_sock, client_address = self.socket.accept()
+                phase = "accepted connection from '%s'" % (client_address,)
+                conn_rfile = client_sock.makefile('rb', self.rbufsize)
+                conn_wfile = client_sock.makefile('wb', self.wbufsize)
+                #-------------------------------------------------------------------
+                #reading request phase
+                #on micropython makefile does nothing returns a usocket.socket obj
+                conn_reader = HttpConnectionReader(conn_rfile, client_address)
+                phase = 'reading request'
+                request = conn_reader.parse_request()
+                if request is None:
+                    raise Exception("got null request")
+                #-------------------------------------------------------------------
+                # handler lookup phase
+                phase = 'handler lookup path'
+                handler = None
+                if not request is None:
+                    meth_paths = self.app.path_handler_registry.get(request.method, {})
+                    handler = meth_paths.get(request.path)
+                #could not match a path directly
+                if handler is None:
+                    # try matching against all regex handlers
+                    phase = 'handler lookup regex'
+                    match = None
+                    meth_regexs = self.app.regex_handler_registry.get(request.method, {})
+                    for repr_regex, data in meth_regexs.items():
+                        regex, h = data
+                        match = regex.match(request.path)
+                        if not match is None:
+                            request.match = match
+                            handler = h
+                            break
+                    else:
+                        #default no other handler matched
+                        handler = self.app.path_handler_registry['DEFAULT']
+                #-------------------------------------------------------------------
+                # response phase
+                conn_writer = HttpConnectionWriter(conn_wfile,request)
+                phase = 'handling response'
+                if DEBUG:
+                    print("INSIDE 'http_server.handle_request' during %s:" % phase)
+                    print("\trequest: %s" % request)
+                handler(conn_writer)
+                return True  #signify that a request was successfully handled
+            except OSError as exc:
+                if exc.args[0] == errno.ETIMEDOUT:  #case for ESP8266
+                    if DEBUG:
+                        print("HttpServer.handle_request: timedout (ETIMEDOUT) during {}".format(phase))
+                    return False  #signify that no request handled
+                elif exc.args[0] == errno.EAGAIN:   #case for ESP32
+                    if DEBUG:
+                        print("HttpServer.handle_request: timedout (EAGAIN) during {}".format(phase))
+                    return False  #signify that no request handled
                 else:
-                    #default no other handler matched
-                    handler = self.app.path_handler_registry['DEFAULT']
-            #-------------------------------------------------------------------
-            # response phase
-            conn_writer = HttpConnectionWriter(conn_wfile,request)
-            phase = 'handling response'
-            if DEBUG:
-                print("INSIDE 'http_server.handle_request' during %s:" % phase)
-                print("\trequest: %s" % request)
-            handler(conn_writer)
-            return True  #signify that a request was successfully handled
-        except OSError as exc:
-            import errno
-            if exc.args[0] == errno.ETIMEDOUT:
-                #if DEBUG:
-                #    print("HttpServer.handle_request: timedout during {}".format(phase))
-                return False  #signify that no request handled
-            else:
-                raise
+                    raise
         except Exception as exc:
             buff = []
             buff.append("Context: Exception caught in 'HttpServer.handle_request' during {}".format(phase))
