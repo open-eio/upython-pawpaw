@@ -26,7 +26,8 @@ from .http_server     import HttpServer
 from .template_engine import Template, LazyTemplate
 
 DEBUG = True
-DEFAULT_LOG_FILENAME = "logs/WebApp.yaml"
+DEFAULT_LOG_DIR      = "logs"
+DEFAULT_LOG_FILENAME = "WebApp.yaml"
 LOG_FILESIZE_LIMIT   = 2**20 #1MB
 ################################################################################
 # DECORATORS
@@ -73,7 +74,7 @@ class route(object):
 # @Router
 #a class decorator which creates a class-private Routing HttpRequestHandler
 def Router(cls):
-    log_filename = "logs/{}.yaml".format(cls.__name__)
+    log_filename = "{}.yaml".format(cls.__name__)
     if DEBUG:
         print("@Router: wrapping class '%s'" % cls.__name__)
         print("\tLOG FILENAME: %s" % log_filename)
@@ -191,6 +192,7 @@ class WebApp(object):
                  server_port,
                  path_handler_registry,
                  regex_handler_registry,
+                 log_dir      = DEFAULT_LOG_DIR,
                  log_filename = DEFAULT_LOG_FILENAME,
                  socket_timeout = None,  #default is BLOCKING
                 ):
@@ -210,7 +212,8 @@ class WebApp(object):
         self.server_port = server_port
         self.path_handler_registry = path_handler_registry
         self.regex_handler_registry = regex_handler_registry
-        self.log_filename = log_filename
+        self.log_filepath = "/".join((log_dir,log_filename))
+        
         addr = (self.server_addr, self.server_port)
         self._server = HttpServer(addr,app=self,timeout=socket_timeout)
         
@@ -230,7 +233,7 @@ class WebApp(object):
         context.send_file("html/404.html")
         
     def get_logger(self):
-        return Logger(self.log_filename, app = self)
+        return Logger(self.log_filepath, app = self)
         
     def get_timestamp(self):
         try:
