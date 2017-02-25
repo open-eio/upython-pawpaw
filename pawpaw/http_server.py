@@ -1,5 +1,12 @@
 import time, socket, errno
 
+if not hasattr(socket,'timeout'): #this is needed on CPython3
+    #on unsupported platforms make a fake monkey-patch
+    #this doesn't actually need to work
+    class SocketTimeout(Exception):
+        pass
+    socket.timeout = SocketTimeout
+
 import gc
 
 try:
@@ -19,6 +26,9 @@ try:
     import json
 except ImportError:
     import ujson as json #micropython specific
+    
+
+
     
     
 from .template_engine import Template, LazyTemplate
@@ -157,6 +167,9 @@ class HttpServer(object):
                     print("\trequest: %s" % request)
                 handler(conn_writer)
                 return True  #signify that a request was successfully handled
+            except socket.timeout as exc: #case for CPython3
+                if DEBUG:
+                    print("HttpServer.handle_request: timedout (socket.timeout) during {}".format(phase))
             except OSError as exc:
                 if exc.args[0] == errno.ETIMEDOUT:  #case for ESP8266
                     if DEBUG:
@@ -168,6 +181,7 @@ class HttpServer(object):
                     return False  #signify that no request handled
                 else:
                     raise
+            
         except Exception as exc:
             buff = []
             buff.append("Context: Exception caught in 'HttpServer.handle_request' during {}".format(phase))
